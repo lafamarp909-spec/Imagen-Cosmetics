@@ -6,9 +6,9 @@
 <title>Imagen Cosmetics · Facturación</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="vendor/xlsx.full.min.js"></script>
-<script src="vendor/jspdf.umd.min.js"></script>
-<script src="vendor/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --bg: #FBF6F2;
@@ -441,6 +441,7 @@ let mode = 'cotizacion';
 let bizInfo = { name:'Imagen Cosmetics', nit:'', phone:'', address:'' };
 let logoDataUrl = null;
 let docCounter = 1;
+const fmt = n => '$' + Math.round(n||0).toLocaleString('es-CO');
 /* ---------- Persistencia (API del servidor / PostgreSQL) ---------- */
 async function apiGet(url){
   const res = await fetch(url);
