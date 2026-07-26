@@ -24,9 +24,12 @@ async function initDb() {
       id INT PRIMARY KEY DEFAULT 1,
       logo TEXT,
       business JSONB DEFAULT '{}'::jsonb,
-      doc_counter INT DEFAULT 1
+      doc_counter INT DEFAULT 1,
+      pin TEXT DEFAULT '1379'
     );
   `);
+  // Migración: si la tabla ya existía de antes, puede que le falte la columna 'pin'.
+  await pool.query(`ALTER TABLE settings ADD COLUMN IF NOT EXISTS pin TEXT DEFAULT '1379';`);
   await pool.query(`INSERT INTO settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS documents (
@@ -78,35 +81,38 @@ async function deleteProduct(code) {
 }
 
 async function getSettings() {
-  const { rows } = await pool.query('SELECT logo, business, doc_counter FROM settings WHERE id = 1');
+  const { rows } = await pool.query('SELECT logo, business, doc_counter, pin FROM settings WHERE id = 1');
   const row = rows[0] || {};
   return {
     logo: row.logo || null,
     business: row.business || {},
     docCounter: row.doc_counter || 1,
+    pin: row.pin || '1379',
   };
 }
 
-async function updateSettings({ logo, business, docCounter }) {
+async function updateSettings({ logo, business, docCounter, pin }) {
   const sets = [];
   const values = [];
   let i = 1;
   if (logo !== undefined) { sets.push(`logo = $${i++}`); values.push(logo); }
   if (business !== undefined) { sets.push(`business = $${i++}`); values.push(JSON.stringify(business)); }
   if (docCounter !== undefined) { sets.push(`doc_counter = $${i++}`); values.push(docCounter); }
+  if (pin !== undefined) { sets.push(`pin = $${i++}`); values.push(pin); }
   if (sets.length === 0) return;
   await pool.query(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, values);
 }
 
 async function getDocuments(q) {
+  // Sin límite: se puede ver todo el historial completo.
   if (q) {
     const { rows } = await pool.query(
-      `SELECT * FROM documents WHERE client_cedula ILIKE $1 OR client_name ILIKE $1 ORDER BY created_at DESC LIMIT 100`,
+      `SELECT * FROM documents WHERE client_cedula ILIKE $1 OR client_name ILIKE $1 ORDER BY created_at DESC`,
       [`%${q}%`]
     );
     return rows;
   }
-  const { rows } = await pool.query('SELECT * FROM documents ORDER BY created_at DESC LIMIT 50');
+  const { rows } = await pool.query('SELECT * FROM documents ORDER BY created_at DESC');
   return rows;
 }
 
@@ -116,6 +122,18 @@ async function insertDocument(doc) {
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
     [doc.docNumber, doc.mode, doc.clientName, doc.clientCedula, doc.clientPhone, JSON.stringify(doc.items), doc.subtotal, doc.ivaTotal, doc.total]
   );
+}
+
+async function updateDocument(id, doc) {
+  await pool.query(
+    `UPDATE documents SET client_name = $1, client_cedula = $2, client_phone = $3, items = $4, subtotal = $5, iva_total = $6, total = $7
+     WHERE id = $8`,
+    [doc.clientName, doc.clientCedula, doc.clientPhone, JSON.stringify(doc.items), doc.subtotal, doc.ivaTotal, doc.total, id]
+  );
+}
+
+async function deleteDocument(id) {
+  await pool.query('DELETE FROM documents WHERE id = $1', [id]);
 }
 
 /* ---------------- Respaldo ---------------- */
@@ -129,5 +147,6 @@ function getBackupFilePath() {
 module.exports = {
   initDb, getProducts, bulkSetProducts, deleteProduct,
   getSettings, updateSettings, getDocuments, insertDocument,
+  updateDocument, deleteDocument,
   getBackupFilePath,
 };

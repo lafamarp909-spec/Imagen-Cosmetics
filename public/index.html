@@ -192,9 +192,41 @@
   .cart-empty svg{ opacity:.5; margin-bottom:10px; }
 
   .totals{ margin-top:16px; margin-left:auto; width:280px; }
-  .totals .line{ display:flex; justify-content:space-between; font-size:13.5px; padding:6px 0; color:var(--muted); }
+  .totals .line{ display:flex; justify-content:space-between; align-items:center; font-size:13.5px; padding:6px 0; color:var(--muted); }
   .totals .line.grand{ color:var(--ink); font-weight:800; font-size:19px; border-top:2px solid var(--wine); padding-top:12px; margin-top:6px; }
   .totals .line.grand span:last-child{ color:var(--wine-dark); font-family:'Playfair Display',serif; }
+  .totals .line.discount-line{ font-size:12.5px; }
+  .discount-input{
+    width:52px; padding:3px 5px; text-align:center; border:1.5px solid var(--line);
+    border-radius:6px; font-size:12px; margin:0 3px; -moz-appearance:textfield;
+  }
+  .edit-value{ display:flex; align-items:center; gap:2px; }
+  .edit-value .cur{ color:inherit; }
+  .total-edit-input{
+    width:96px; text-align:right; border:1.5px solid transparent; background:transparent;
+    padding:3px 5px; border-radius:6px; font-family:inherit; font-size:13.5px; color:inherit;
+  }
+  .total-edit-input:hover{ border-color:var(--line); }
+  .total-edit-input:focus{ outline:none; border-color:var(--wine); box-shadow:0 0 0 2px rgba(110,42,56,.1); background:#fff; }
+  .line.grand .total-edit-input{ font-size:19px; font-weight:800; color:var(--wine-dark); font-family:'Playfair Display',serif; width:126px; }
+  .totals-hint{ font-size:11px; color:var(--muted); margin-top:8px; line-height:1.4; }
+
+  /* modal historial */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(43,31,34,.55);
+    align-items:center; justify-content:center; z-index:1000; padding:20px;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal-box{
+    background:#fff; border-radius:16px; max-width:760px; width:100%; max-height:88vh;
+    overflow-y:auto; padding:22px 24px; box-shadow:var(--shadow);
+  }
+  .modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .modal-header h3{ font-family:'Playfair Display', serif; color:var(--wine-dark); margin:0; font-size:19px; }
+  .modal-footer{ display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; justify-content:flex-end; }
+  .modal-footer .btn{ flex:none; }
+  .hm-client{ font-size:13.5px; margin-bottom:12px; }
+  .hm-totals{ margin-left:auto; margin-top:14px; }
 
   .action-bar{ display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; }
   .action-bar .btn{ flex:1; min-width:150px; }
@@ -390,6 +422,18 @@
           <button class="btn btn-block" style="background:var(--danger); color:#fff;" onclick="clearCatalog()">🗑 Borrar todo el catálogo</button>
         </div>
       </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Código de seguridad</summary>
+        <div class="body">
+          <p class="sub" style="margin-bottom:8px;">Protege la actualización de precios y el historial de clientes (ver, editar, eliminar) con un código de 4 dígitos.</p>
+          <div class="row cols-2">
+            <div><label>Código actual</label><input type="text" id="pinCurrent" maxlength="4" inputmode="numeric" placeholder="••••"></div>
+            <div><label>Código nuevo (4 dígitos)</label><input type="text" id="pinNew" maxlength="4" inputmode="numeric" placeholder="••••"></div>
+          </div>
+          <button class="btn btn-primary btn-block" onclick="changePin()">Cambiar código</button>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -432,8 +476,22 @@
 
       <div class="totals">
         <div class="line"><span>Subtotal</span><span id="totalSubtotal">$0</span></div>
-        <div class="line"><span>IVA</span><span id="totalIva">$0</span></div>
-        <div class="line grand"><span>Total</span><span id="totalGrand">$0</span></div>
+        <div class="line discount-line">
+          <span>Descuento <input type="number" id="discountPercent" class="discount-input" min="0" max="100" step="0.1" value="0" oninput="onDiscountChange()">%</span>
+          <span id="totalDescuento">-$0</span>
+        </div>
+        <div class="line">
+          <span>IVA</span>
+          <span class="edit-value"><span class="cur">$</span><input type="number" id="totalIvaInput" class="total-edit-input" value="0" oninput="onManualTotalChange('iva', this.value)"></span>
+        </div>
+        <div class="line grand">
+          <span>Total</span>
+          <span class="edit-value"><span class="cur">$</span><input type="number" id="totalGrandInput" class="total-edit-input" value="0" oninput="onManualTotalChange('total', this.value)"></span>
+        </div>
+        <div id="totalsResetWrap" style="display:none; text-align:right; margin-top:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="resetManualTotals()">↺ Recalcular automático</button>
+        </div>
+        <div class="totals-hint">Puedes escribir el IVA o el Total a mano si le haces un descuento al cliente.</div>
       </div>
 
       <div class="action-bar">
@@ -446,12 +504,23 @@
 
     <div class="panel">
       <h2>Historial de clientes</h2>
-      <p class="sub">Busca por cédula o nombre para ver las facturas y cotizaciones anteriores de un cliente.</p>
+      <p class="sub">Busca por cédula o nombre para ver las facturas y cotizaciones anteriores de un cliente. Deja el buscador vacío para ver todo el historial.</p>
       <input type="text" id="historySearch" placeholder="Buscar por cédula o nombre..." oninput="renderHistory(this.value)">
       <div class="catalog-list" id="historyList" style="margin-top:10px; max-height:260px;"></div>
     </div>
   </div>
 </main>
+
+<div class="modal-overlay" id="historyModalOverlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="historyModalTitle">Documento</h3>
+      <button class="icon-btn" onclick="closeHistoryModal()">✕</button>
+    </div>
+    <div id="historyModalBody"></div>
+    <div class="modal-footer" id="historyModalFooter"></div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -478,6 +547,7 @@
   </table>
   <div class="p-totals">
     <div class="l"><span>Subtotal</span><span id="pSubtotal">$0</span></div>
+    <div class="l" id="pDescuentoLine" style="display:none;"><span id="pDescuentoLabel">Descuento</span><span id="pDescuento">-$0</span></div>
     <div class="l"><span>IVA</span><span id="pIva">$0</span></div>
     <div class="l grand"><span>Total</span><span id="pGrand">$0</span></div>
   </div>
@@ -494,6 +564,21 @@ let bizInfo = { name:'Imagen Cosmetics', nit:'', phone:'', address:'' };
 let logoDataUrl = null;
 let docCounter = 1;
 const fmt = n => '$' + Math.round(n||0).toLocaleString('es-CO');
+
+/* ---------- Descuento / totales editables ---------- */
+let discountPercent = 0;
+let manualIva = null;
+let manualTotal = null;
+
+/* ---------- Código de seguridad (protege precios e historial) ---------- */
+let adminPin = '1379';
+let pinVerifiedSession = false;
+
+/* ---------- Historial (modal ver/editar) ---------- */
+let historyItems = [];
+let historyEditingId = null;
+let historyEditWorking = null;
+let historyEditClient = null;
 /* ---------- Persistencia (API del servidor / PostgreSQL) ---------- */
 async function apiGet(url){
   const res = await fetch(url);
@@ -509,6 +594,11 @@ async function apiSend(url, method, body){
   if(!res.ok) throw new Error('Error de red: '+url);
   return res.json();
 }
+async function apiDelete(url){
+  const res = await fetch(url, { method:'DELETE' });
+  if(!res.ok) throw new Error('Error de red: '+url);
+  return res.json();
+}
 
 async function loadAll(){
   try{
@@ -519,6 +609,7 @@ async function loadAll(){
     if(s.logo){ logoDataUrl = s.logo; applyLogo(); }
     if(s.business){ bizInfo = {name:'Imagen Cosmetics', nit:'', phone:'', address:'', ...s.business}; applyBizInfo(); }
     docCounter = s.docCounter || 1;
+    if(s.pin){ adminPin = s.pin; }
   }catch(e){ console.error(e); }
   renderCatalog();
   renderHistory();
@@ -539,6 +630,38 @@ async function saveBizStorage(){
 async function saveCounter(){
   try{ await apiSend('/api/settings', 'PUT', {docCounter}); }
   catch(e){ console.error(e); }
+}
+
+/* ---------- Código de seguridad ---------- */
+function requirePin(actionFn){
+  if(pinVerifiedSession){ actionFn(); return; }
+  const entered = prompt('Ingresa el código de seguridad (4 dígitos):');
+  if(entered === null) return;
+  if(entered.trim() === adminPin){
+    pinVerifiedSession = true;
+    actionFn();
+  } else {
+    toast('Código incorrecto');
+  }
+}
+async function changePin(){
+  const current = document.getElementById('pinCurrent').value.trim();
+  const nuevo = document.getElementById('pinNew').value.trim();
+  if(current !== adminPin){ toast('El código actual no es correcto'); return; }
+  if(!/^\d{4}$/.test(nuevo)){ toast('El código nuevo debe tener 4 dígitos'); return; }
+  const prev = adminPin;
+  adminPin = nuevo;
+  try{
+    await apiSend('/api/settings', 'PUT', {pin: adminPin});
+    pinVerifiedSession = true;
+    document.getElementById('pinCurrent').value = '';
+    document.getElementById('pinNew').value = '';
+    toast('Código de seguridad actualizado');
+  }catch(e){
+    console.error(e);
+    adminPin = prev;
+    toast('No se pudo guardar el código en el servidor');
+  }
 }
 
 /* ---------- Toast ---------- */
@@ -724,21 +847,25 @@ async function addProductManual(){
     toast('Completa código, nombre y precio');
     return;
   }
-  // Si estábamos editando un producto y cambiaron el código, elimina el original
-  if(editingCode && editingCode.toLowerCase() !== code.toLowerCase()){
-    catalog = catalog.filter(p => p.code.toLowerCase() !== editingCode.toLowerCase());
-  }
-  const existing = findProduct(code);
-  if(existing){
-    existing.name = name; existing.price = price; existing.iva = iva;
-  } else {
-    catalog.push({code, name, price, iva});
-  }
-  await saveCatalog();
-  renderCatalog(document.getElementById('catalogSearch').value);
-  const wasEditing = !!editingCode;
-  cancelEditProduct();
-  toast(wasEditing ? 'Producto actualizado' : 'Producto guardado en el catálogo');
+  const doSave = async () => {
+    // Si estábamos editando un producto y cambiaron el código, elimina el original
+    if(editingCode && editingCode.toLowerCase() !== code.toLowerCase()){
+      catalog = catalog.filter(p => p.code.toLowerCase() !== editingCode.toLowerCase());
+    }
+    const existing = findProduct(code);
+    if(existing){
+      existing.name = name; existing.price = price; existing.iva = iva;
+    } else {
+      catalog.push({code, name, price, iva});
+    }
+    await saveCatalog();
+    renderCatalog(document.getElementById('catalogSearch').value);
+    const wasEditing = !!editingCode;
+    cancelEditProduct();
+    toast(wasEditing ? 'Producto actualizado' : 'Producto guardado en el catálogo');
+  };
+  // Modificar el precio de un producto existente requiere el código de seguridad.
+  if(editingCode){ requirePin(doSave); } else { await doSave(); }
 }
 
 async function deleteProduct(code){
@@ -748,16 +875,18 @@ async function deleteProduct(code){
 }
 
 async function bulkUpdatePrices(){
-  const pct = parseFloat(document.getElementById('bulkPercent').value);
-  if(isNaN(pct)){ toast('Ingresa un porcentaje válido'); return; }
-  if(catalog.length === 0){ toast('El catálogo está vacío'); return; }
-  const ok = confirm(`¿Aplicar ${pct > 0 ? '+' : ''}${pct}% al precio de los ${catalog.length} productos del catálogo?`);
-  if(!ok) return;
-  catalog.forEach(p => { p.price = Math.round(p.price * (1 + pct/100)); });
-  await saveCatalog();
-  renderCatalog(document.getElementById('catalogSearch').value);
-  document.getElementById('bulkPercent').value = '';
-  toast(`Precios actualizados ${pct > 0 ? '+' : ''}${pct}%`);
+  requirePin(async () => {
+    const pct = parseFloat(document.getElementById('bulkPercent').value);
+    if(isNaN(pct)){ toast('Ingresa un porcentaje válido'); return; }
+    if(catalog.length === 0){ toast('El catálogo está vacío'); return; }
+    const ok = confirm(`¿Aplicar ${pct > 0 ? '+' : ''}${pct}% al precio de los ${catalog.length} productos del catálogo?`);
+    if(!ok) return;
+    catalog.forEach(p => { p.price = Math.round(p.price * (1 + pct/100)); });
+    await saveCatalog();
+    renderCatalog(document.getElementById('catalogSearch').value);
+    document.getElementById('bulkPercent').value = '';
+    toast(`Precios actualizados ${pct > 0 ? '+' : ''}${pct}%`);
+  });
 }
 
 async function clearCatalog(){
@@ -975,6 +1104,10 @@ function renderCart(){
       </tr>`;
     }).join('');
   }
+  // Cualquier cambio en los productos del documento invalida un total escrito a mano
+  // (pero conserva el % de descuento, que sigue aplicando sobre el nuevo subtotal).
+  manualIva = null;
+  manualTotal = null;
   computeTotals();
 }
 function updateQty(idx, val){
@@ -989,25 +1122,74 @@ function removeFromCart(idx){
 async function clearCart(){
   if(cart.length===0) return;
   cart = [];
+  discountPercent = 0;
+  document.getElementById('discountPercent').value = 0;
   renderCart();
   toast('Documento vaciado');
 }
+/* ---------- Descuento y totales editables ---------- */
+function onDiscountChange(){
+  const v = parseFloat(document.getElementById('discountPercent').value);
+  discountPercent = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+  manualIva = null;
+  manualTotal = null;
+  computeTotals();
+}
+function onManualTotalChange(field, val){
+  const num = val === '' ? null : parseFloat(val);
+  const clean = (num === null || isNaN(num)) ? null : num;
+  if(field === 'iva') manualIva = clean;
+  if(field === 'total') manualTotal = clean;
+  computeTotals();
+}
+function resetManualTotals(){
+  manualIva = null;
+  manualTotal = null;
+  discountPercent = 0;
+  document.getElementById('discountPercent').value = 0;
+  computeTotals();
+  toast('Totales recalculados automáticamente');
+}
 function computeTotals(){
-  let subtotal = 0, ivaTotal = 0;
+  let subtotalRaw = 0, ivaRaw = 0;
   cart.forEach(i => {
     const base = i.price * i.qty;
-    subtotal += base;
-    ivaTotal += base * (i.iva/100);
+    subtotalRaw += base;
+    ivaRaw += base * (i.iva/100);
   });
+  const factor = 1 - (discountPercent/100);
+  const subtotal = subtotalRaw * factor;
+  const discountAmount = subtotalRaw - subtotal;
+  const ivaAuto = ivaRaw * factor;
+  const ivaTotal = manualIva !== null ? manualIva : ivaAuto;
+  const totalAuto = subtotal + ivaTotal;
+  const total = manualTotal !== null ? manualTotal : totalAuto;
+
   document.getElementById('totalSubtotal').textContent = fmt(subtotal);
-  document.getElementById('totalIva').textContent = fmt(ivaTotal);
-  document.getElementById('totalGrand').textContent = fmt(subtotal + ivaTotal);
-  return {subtotal, ivaTotal, total: subtotal+ivaTotal};
+  document.getElementById('totalDescuento').textContent = '-' + fmt(discountAmount);
+
+  const ivaInput = document.getElementById('totalIvaInput');
+  const totalInput = document.getElementById('totalGrandInput');
+  if(document.activeElement !== ivaInput) ivaInput.value = Math.round(ivaTotal);
+  if(document.activeElement !== totalInput) totalInput.value = Math.round(total);
+
+  document.getElementById('totalsResetWrap').style.display =
+    (manualIva !== null || manualTotal !== null || discountPercent > 0) ? 'block' : 'none';
+
+  return {subtotal, ivaTotal, total, subtotalRaw, discountAmount};
 }
 
 /* ---------- Preparar documento imprimible ---------- */
 function buildPrintable(){
-  const {subtotal, ivaTotal, total} = computeTotals();
+  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const descLine = document.getElementById('pDescuentoLine');
+  if(discountPercent > 0 && discountAmount > 0){
+    descLine.style.display = 'flex';
+    document.getElementById('pDescuentoLabel').textContent = 'Descuento (' + discountPercent + '%)';
+    document.getElementById('pDescuento').textContent = '-' + fmt(discountAmount);
+  } else {
+    descLine.style.display = 'none';
+  }
   document.getElementById('pBizName').textContent = bizInfo.name || 'Imagen Cosmetics';
   const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
   document.getElementById('pBizMeta').textContent = metaParts.join(' · ');
@@ -1072,6 +1254,7 @@ function renderHistory(filter=''){
     try{
       items = await apiGet('/api/documents' + (filter.trim() ? '?q='+encodeURIComponent(filter.trim()) : ''));
     }catch(e){ console.error(e); list.innerHTML = '<div class="empty-catalog">No se pudo cargar el historial.</div>'; return; }
+    historyItems = items;
     if(items.length === 0){
       list.innerHTML = '<div class="empty-catalog">' + (filter.trim() ? 'Sin resultados.' : 'Aún no hay documentos guardados.') + '</div>';
       return;
@@ -1083,16 +1266,150 @@ function renderHistory(filter=''){
           <div class="name">${escapeHtml(r.client_name||'')}${r.client_cedula ? ' · CC '+escapeHtml(r.client_cedula) : ''}</div>
         </div>
         <div class="price">${fmt(r.total)}</div>
+        <div class="actions">
+          <button class="icon-btn" title="Ver factura" onclick="viewHistoryDoc(${r.id})">👁</button>
+          <button class="icon-btn danger" title="Eliminar" onclick="confirmDeleteHistoryDoc(${r.id})">✕</button>
+        </div>
       </div>
     `).join('');
   }, 250);
+}
+
+/* ---------- Modal: ver / editar / eliminar documento del historial ---------- */
+function viewHistoryDoc(id){
+  requirePin(() => openHistoryModal(id));
+}
+function findHistoryDoc(id){
+  return historyItems.find(d => String(d.id) === String(id));
+}
+function openHistoryModal(id){
+  const doc = findHistoryDoc(id);
+  if(!doc){ toast('No se encontró el documento'); return; }
+  historyEditingId = id;
+  document.getElementById('historyModalTitle').textContent =
+    (doc.mode === 'factura' ? 'Factura ' : 'Cotización ') + (doc.doc_number || '');
+  const itemsRows = (doc.items || []).map(i => {
+    const lt = i.price * i.qty * (1 + i.iva/100);
+    return `<tr><td>${escapeHtml(i.code)}</td><td>${escapeHtml(i.name)}</td><td class="num">${i.qty}</td><td class="num">${fmt(i.price)}</td><td class="num">${i.iva}%</td><td class="num">${fmt(lt)}</td></tr>`;
+  }).join('');
+  document.getElementById('historyModalBody').innerHTML = `
+    <div class="hm-client"><b>Cliente:</b> ${escapeHtml(doc.client_name || 'Consumidor final')}${doc.client_cedula ? ' · CC ' + escapeHtml(doc.client_cedula) : ''}${doc.client_phone ? ' · ' + escapeHtml(doc.client_phone) : ''}</div>
+    <table class="cart hm-table">
+      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Total</th></tr></thead>
+      <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Sin productos</td></tr>'}</tbody>
+    </table>
+    <div class="totals hm-totals">
+      <div class="line"><span>Subtotal</span><span>${fmt(doc.subtotal)}</span></div>
+      <div class="line"><span>IVA</span><span>${fmt(doc.iva_total)}</span></div>
+      <div class="line grand"><span>Total</span><span>${fmt(doc.total)}</span></div>
+    </div>
+  `;
+  document.getElementById('historyModalFooter').innerHTML = `
+    <button class="btn btn-ghost" onclick="closeHistoryModal()">Cerrar</button>
+    <button class="btn btn-gold" onclick="startEditHistoryDoc()">✎ Editar</button>
+    <button class="btn" style="background:var(--danger); color:#fff;" onclick="confirmDeleteHistoryDoc(${id})">🗑 Eliminar</button>
+  `;
+  document.getElementById('historyModalOverlay').classList.add('show');
+}
+function closeHistoryModal(){
+  document.getElementById('historyModalOverlay').classList.remove('show');
+  historyEditingId = null;
+  historyEditWorking = null;
+  historyEditClient = null;
+}
+function startEditHistoryDoc(){
+  const doc = findHistoryDoc(historyEditingId);
+  if(!doc) return;
+  historyEditWorking = JSON.parse(JSON.stringify(doc.items || []));
+  historyEditClient = { name: doc.client_name || '', cedula: doc.client_cedula || '', phone: doc.client_phone || '' };
+  renderHmEditBody();
+  document.getElementById('historyModalFooter').innerHTML = `
+    <button class="btn btn-ghost" onclick="openHistoryModal(historyEditingId)">Cancelar</button>
+    <button class="btn btn-gold" onclick="saveHistoryEdit()">✓ Guardar cambios</button>
+  `;
+}
+function renderHmEditBody(){
+  const rows = historyEditWorking.map((i, idx) => {
+    const lt = i.price * i.qty * (1 + i.iva/100);
+    return `<tr>
+      <td>${escapeHtml(i.code)}</td>
+      <td>${escapeHtml(i.name)}</td>
+      <td class="num"><input type="number" min="1" class="qty-input" value="${i.qty}" onchange="hmUpdateItem(${idx},'qty',this.value)"></td>
+      <td class="num"><input type="number" min="0" class="qty-input" style="width:90px" value="${i.price}" onchange="hmUpdateItem(${idx},'price',this.value)"></td>
+      <td class="num"><input type="number" min="0" max="100" class="qty-input" style="width:60px" value="${i.iva}" onchange="hmUpdateItem(${idx},'iva',this.value)"></td>
+      <td class="num">${fmt(lt)}</td>
+      <td><button class="icon-btn danger" onclick="hmRemoveItem(${idx})">✕</button></td>
+    </tr>`;
+  }).join('');
+  let subtotal = 0, ivaTotal = 0;
+  historyEditWorking.forEach(i => { const base = i.price * i.qty; subtotal += base; ivaTotal += base * (i.iva/100); });
+  document.getElementById('historyModalBody').innerHTML = `
+    <div class="row cols-3" style="margin-bottom:12px;">
+      <div><label>Cliente</label><input type="text" id="hmClientName" value="${escapeAttr(historyEditClient.name)}" onchange="historyEditClient.name=this.value"></div>
+      <div><label>Cédula</label><input type="text" id="hmClientCedula" value="${escapeAttr(historyEditClient.cedula)}" onchange="historyEditClient.cedula=this.value"></div>
+      <div><label>Teléfono</label><input type="text" id="hmClientPhone" value="${escapeAttr(historyEditClient.phone)}" onchange="historyEditClient.phone=this.value"></div>
+    </div>
+    <table class="cart hm-table">
+      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">Sin productos</td></tr>'}</tbody>
+    </table>
+    <div class="totals hm-totals">
+      <div class="line"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
+      <div class="line"><span>IVA</span><span>${fmt(ivaTotal)}</span></div>
+      <div class="line grand"><span>Total</span><span>${fmt(subtotal + ivaTotal)}</span></div>
+    </div>
+  `;
+}
+function hmUpdateItem(idx, field, value){
+  const v = field === 'qty' ? Math.max(1, parseInt(value) || 1) : parseFloat(value);
+  historyEditWorking[idx][field] = isNaN(v) ? historyEditWorking[idx][field] : v;
+  renderHmEditBody();
+}
+function hmRemoveItem(idx){
+  historyEditWorking.splice(idx, 1);
+  renderHmEditBody();
+}
+async function saveHistoryEdit(){
+  let subtotal = 0, ivaTotal = 0;
+  historyEditWorking.forEach(i => { const base = i.price * i.qty; subtotal += base; ivaTotal += base * (i.iva/100); });
+  const total = subtotal + ivaTotal;
+  const payload = {
+    clientName: historyEditClient.name.trim() || 'Consumidor final',
+    clientCedula: historyEditClient.cedula.trim(),
+    clientPhone: historyEditClient.phone.trim(),
+    items: historyEditWorking,
+    subtotal, ivaTotal, total,
+  };
+  try{
+    await apiSend('/api/documents/' + historyEditingId, 'PUT', payload);
+    toast('Documento actualizado');
+    closeHistoryModal();
+    renderHistory(document.getElementById('historySearch').value);
+  }catch(e){ console.error(e); toast('No se pudo guardar los cambios'); }
+}
+function confirmDeleteHistoryDoc(id){
+  requirePin(() => {
+    const doc = findHistoryDoc(id);
+    const label = doc ? (doc.doc_number || '') + ' - ' + (doc.client_name || 'Consumidor final') : id;
+    if(!confirm('¿Eliminar el documento ' + label + '? Esta acción no se puede deshacer.')) return;
+    deleteHistoryDoc(id);
+  });
+}
+async function deleteHistoryDoc(id){
+  try{
+    await apiDelete('/api/documents/' + id);
+    toast('Documento eliminado');
+    closeHistoryModal();
+    renderHistory(document.getElementById('historySearch').value);
+  }catch(e){ console.error(e); toast('No se pudo eliminar el documento'); }
 }
 
 /* ---------- Descargar PDF ---------- */
 async function downloadPdf(){
   if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
   if(printFormat === 'recibo'){ downloadPdfRecibo(); return; }
-  const {subtotal, ivaTotal, total} = buildPrintable();
+  const {subtotal, ivaTotal, total, discountAmount} = buildPrintable();
+  const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
 
@@ -1143,14 +1460,20 @@ async function downloadPdf(){
   const finalY = doc.lastAutoTable.finalY + 8;
   doc.setFontSize(10);
   doc.text('Subtotal', 150, finalY);
-  doc.text(fmt(subtotal), 196, finalY, {align:'right'});
-  doc.text('IVA', 150, finalY+6);
-  doc.text(fmt(ivaTotal), 196, finalY+6, {align:'right'});
+  doc.text(fmt(subtotal + discountAmount), 196, finalY, {align:'right'});
+  let offsetY = 0;
+  if(showDiscount){
+    doc.text('Descuento (' + discountPercent + '%)', 150, finalY+6);
+    doc.text('-' + fmt(discountAmount), 196, finalY+6, {align:'right'});
+    offsetY = 6;
+  }
+  doc.text('IVA', 150, finalY+6+offsetY);
+  doc.text(fmt(ivaTotal), 196, finalY+6+offsetY, {align:'right'});
   doc.setFont('helvetica','bold');
   doc.setFontSize(13);
   doc.setTextColor(110,42,56);
-  doc.text('Total', 150, finalY+15);
-  doc.text(fmt(total), 196, finalY+15, {align:'right'});
+  doc.text('Total', 150, finalY+15+offsetY);
+  doc.text(fmt(total), 196, finalY+15+offsetY, {align:'right'});
 
   doc.setFontSize(9);
   doc.setTextColor(140,115,120);
@@ -1166,12 +1489,13 @@ async function downloadPdf(){
 
 /* ---------- Descargar PDF formato recibo (80mm, alargado hacia abajo) ---------- */
 function downloadPdfRecibo(){
-  const {subtotal, ivaTotal, total} = computeTotals();
+  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
   const W = 80; // ancho fijo en mm (tipo ticket)
   // Alto dinámico: crece hacia abajo según la cantidad de productos
   const rowsHeight = cart.reduce((acc, item) => acc + (item.name.length > 22 ? 12 : 8), 0);
-  const H = 55 + rowsHeight + 30; // encabezado + filas + totales/footer
+  const H = 55 + rowsHeight + 30 + (showDiscount ? 5 : 0); // encabezado + filas + totales/footer
   const doc = new jsPDF({ unit:'mm', format:[W, H] });
   const cx = W/2;
 
@@ -1240,7 +1564,10 @@ function downloadPdfRecibo(){
 
   doc.setFontSize(8);
   doc.setTextColor(40,30,32);
-  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal), W-4, y, {align:'right'}); y += 4.5;
+  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal + discountAmount), W-4, y, {align:'right'}); y += 4.5;
+  if(showDiscount){
+    doc.text('Descuento (' + discountPercent + '%)', 4, y); doc.text('-' + fmt(discountAmount), W-4, y, {align:'right'}); y += 4.5;
+  }
   doc.text('IVA', 4, y); doc.text(fmt(ivaTotal), W-4, y, {align:'right'}); y += 5.5;
   doc.setFont('helvetica','bold');
   doc.setFontSize(11);
@@ -1262,7 +1589,8 @@ function downloadPdfRecibo(){
 /* ---------- Compartir por WhatsApp ---------- */
 function shareWhatsapp(){
   if(cart.length===0){ toast('Agrega productos antes de compartir'); return; }
-  const {subtotal, ivaTotal, total} = computeTotals();
+  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const showDiscount = discountPercent > 0 && discountAmount > 0;
   const cName = document.getElementById('clientName').value.trim();
   const cCedula = document.getElementById('clientCedula').value.trim();
   let lines = [];
@@ -1275,7 +1603,8 @@ function shareWhatsapp(){
     lines.push(`${i.qty} x ${i.name} - ${fmt(lt)}`);
   });
   lines.push('');
-  lines.push(`Subtotal: ${fmt(subtotal)}`);
+  lines.push(`Subtotal: ${fmt(subtotal + discountAmount)}`);
+  if(showDiscount) lines.push(`Descuento (${discountPercent}%): -${fmt(discountAmount)}`);
   lines.push(`IVA: ${fmt(ivaTotal)}`);
   lines.push(`*Total: ${fmt(total)}*`);
   lines.push('');

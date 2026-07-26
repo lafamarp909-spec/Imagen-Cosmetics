@@ -29,7 +29,8 @@ function initDb() {
       id INTEGER PRIMARY KEY,
       logo TEXT,
       business TEXT DEFAULT '{}',
-      doc_counter INTEGER DEFAULT 1
+      doc_counter INTEGER DEFAULT 1,
+      pin TEXT DEFAULT '1379'
     );
     CREATE TABLE IF NOT EXISTS documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,6 +46,13 @@ function initDb() {
       total REAL
     );
   `);
+  // Migración: si la base ya existía de antes, puede que le falte la columna 'pin'.
+  try {
+    const cols = db.prepare(`PRAGMA table_info(settings)`).all();
+    if (!cols.some(c => c.name === 'pin')) {
+      db.exec(`ALTER TABLE settings ADD COLUMN pin TEXT DEFAULT '1379'`);
+    }
+  } catch (e) { console.error('No se pudo migrar la columna pin:', e); }
   db.prepare(`INSERT OR IGNORE INTO settings (id) VALUES (1)`).run();
   console.log('Base de datos local lista (archivo: ' + dbPath + ')');
   return Promise.resolve();
@@ -78,20 +86,22 @@ function deleteProduct(code) {
 /* ---------------- Ajustes ---------------- */
 
 function getSettings() {
-  const row = db.prepare('SELECT logo, business, doc_counter FROM settings WHERE id = 1').get() || {};
+  const row = db.prepare('SELECT logo, business, doc_counter, pin FROM settings WHERE id = 1').get() || {};
   return Promise.resolve({
     logo: row.logo || null,
     business: row.business ? JSON.parse(row.business) : {},
     docCounter: row.doc_counter || 1,
+    pin: row.pin || '1379',
   });
 }
 
-function updateSettings({ logo, business, docCounter }) {
+function updateSettings({ logo, business, docCounter, pin }) {
   const sets = [];
   const values = [];
   if (logo !== undefined) { sets.push('logo = ?'); values.push(logo); }
   if (business !== undefined) { sets.push('business = ?'); values.push(JSON.stringify(business)); }
   if (docCounter !== undefined) { sets.push('doc_counter = ?'); values.push(docCounter); }
+  if (pin !== undefined) { sets.push('pin = ?'); values.push(pin); }
   if (sets.length === 0) return Promise.resolve();
   values.push(1);
   db.prepare(`UPDATE settings SET ${sets.join(', ')} WHERE id = ?`).run(...values);
@@ -101,13 +111,14 @@ function updateSettings({ logo, business, docCounter }) {
 /* ---------------- Documentos (facturas / cotizaciones) ---------------- */
 
 function getDocuments(q) {
+  // Sin límite: se puede ver todo el historial completo.
   let rows;
   if (q) {
     rows = db.prepare(
-      `SELECT * FROM documents WHERE client_cedula LIKE ? OR client_name LIKE ? ORDER BY created_at DESC LIMIT 100`
+      `SELECT * FROM documents WHERE client_cedula LIKE ? OR client_name LIKE ? ORDER BY created_at DESC`
     ).all(`%${q}%`, `%${q}%`);
   } else {
-    rows = db.prepare('SELECT * FROM documents ORDER BY created_at DESC LIMIT 50').all();
+    rows = db.prepare('SELECT * FROM documents ORDER BY created_at DESC').all();
   }
   rows = rows.map((r) => ({ ...r, items: r.items ? JSON.parse(r.items) : [] }));
   return Promise.resolve(rows);
@@ -124,6 +135,22 @@ function insertDocument(doc) {
   return Promise.resolve();
 }
 
+function updateDocument(id, doc) {
+  db.prepare(
+    `UPDATE documents SET client_name = ?, client_cedula = ?, client_phone = ?, items = ?, subtotal = ?, iva_total = ?, total = ?
+     WHERE id = ?`
+  ).run(
+    doc.clientName, doc.clientCedula, doc.clientPhone,
+    JSON.stringify(doc.items), doc.subtotal, doc.ivaTotal, doc.total, id
+  );
+  return Promise.resolve();
+}
+
+function deleteDocument(id) {
+  db.prepare('DELETE FROM documents WHERE id = ?').run(id);
+  return Promise.resolve();
+}
+
 /* ---------------- Respaldo ---------------- */
 
 function getBackupFilePath() {
@@ -136,5 +163,6 @@ function getBackupFilePath() {
 module.exports = {
   initDb, getProducts, bulkSetProducts, deleteProduct,
   getSettings, updateSettings, getDocuments, insertDocument,
+  updateDocument, deleteDocument,
   getBackupFilePath,
 };

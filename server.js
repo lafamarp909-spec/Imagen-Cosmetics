@@ -89,6 +89,26 @@ app.post('/api/documents', async (req, res) => {
   }
 });
 
+app.put('/api/documents/:id', async (req, res) => {
+  try {
+    await db.updateDocument(req.params.id, req.body);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo actualizar el documento' });
+  }
+});
+
+app.delete('/api/documents/:id', async (req, res) => {
+  try {
+    await db.deleteDocument(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo eliminar el documento' });
+  }
+});
+
 /* ---------------- Respaldo ---------------- */
 // Sin internet o sin BACKUP_KEY configurada: descarga libre (estás en tu propio computador).
 // En Railway, configura la variable BACKUP_KEY y solo se podrá descargar con esa clave.
