@@ -144,14 +144,14 @@
   .catalog-search{ margin-bottom:10px; }
   .catalog-list{ max-height:230px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
   .catalog-item{
-    display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--line);
+    display:flex; align-items:flex-start; gap:8px; padding:9px 10px; border-bottom:1px solid var(--line);
     font-size:13px;
   }
   .catalog-item:last-child{ border-bottom:none; }
   .catalog-item .info{ flex:1; min-width:0; }
   .catalog-item .code{ font-size:10.5px; color:var(--muted); font-weight:600; letter-spacing:.3px; }
-  .catalog-item .name{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .catalog-item .price{ font-size:12.5px; color:var(--wine-dark); font-weight:700; white-space:nowrap; }
+  .catalog-item .name{ font-weight:600; white-space:normal; overflow-wrap:break-word; word-break:break-word; line-height:1.3; }
+  .catalog-item .price{ font-size:12.5px; color:var(--wine-dark); font-weight:700; white-space:nowrap; padding-top:1px; }
   .catalog-item .actions{ display:flex; gap:4px; }
   .icon-btn{
     border:none; background:var(--gold-soft); color:var(--wine-dark); width:26px; height:26px;
@@ -326,6 +326,7 @@
       <div class="catalog-search">
         <input type="text" id="catalogSearch" placeholder="Buscar en catálogo por nombre o código...">
       </div>
+      <div class="catalog-count" id="catalogCount" style="font-size:12px; color:var(--muted); margin-bottom:6px;"></div>
       <div class="catalog-list" id="catalogList"></div>
 
       <details class="collapse" id="addProductDetails">
@@ -464,7 +465,7 @@
         <thead>
           <tr>
             <th>Código</th><th>Producto</th><th class="num">Cant.</th>
-            <th class="num">Precio (IVA incl.)</th><th class="num">IVA</th><th class="num">Total</th><th></th>
+            <th class="num">Precio (IVA incl.)</th><th class="num">Total</th><th></th>
           </tr>
         </thead>
         <tbody id="cartBody"></tbody>
@@ -480,10 +481,6 @@
           <span>Descuento <input type="number" id="discountPercent" class="discount-input" min="0" max="100" step="0.1" value="0" oninput="onDiscountChange()">%</span>
           <span id="totalDescuento">-$0</span>
         </div>
-        <div class="line">
-          <span>IVA</span>
-          <span class="edit-value"><span class="cur">$</span><input type="number" id="totalIvaInput" class="total-edit-input" value="0" oninput="onManualTotalChange('iva', this.value)"></span>
-        </div>
         <div class="line grand">
           <span>Total</span>
           <span class="edit-value"><span class="cur">$</span><input type="number" id="totalGrandInput" class="total-edit-input" value="0" oninput="onManualTotalChange('total', this.value)"></span>
@@ -491,7 +488,7 @@
         <div id="totalsResetWrap" style="display:none; text-align:right; margin-top:6px;">
           <button class="btn btn-ghost btn-sm" onclick="resetManualTotals()">↺ Recalcular automático</button>
         </div>
-        <div class="totals-hint">Puedes escribir el IVA o el Total a mano si le haces un descuento al cliente.</div>
+        <div class="totals-hint">Puedes escribir el Total a mano si le haces un descuento especial al cliente.</div>
       </div>
 
       <div class="action-bar">
@@ -542,13 +539,12 @@
   </div>
   <div class="p-client" id="pClient"></div>
   <table class="p-table">
-    <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">IVA</th><th class="num">Total</th></tr></thead>
+    <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">Total</th></tr></thead>
     <tbody id="pTableBody"></tbody>
   </table>
   <div class="p-totals">
     <div class="l"><span>Subtotal</span><span id="pSubtotal">$0</span></div>
     <div class="l" id="pDescuentoLine" style="display:none;"><span id="pDescuentoLabel">Descuento</span><span id="pDescuento">-$0</span></div>
-    <div class="l"><span>IVA</span><span id="pIva">$0</span></div>
     <div class="l grand"><span>Total</span><span id="pGrand">$0</span></div>
   </div>
   <div class="p-footer">Gracias por su compra · Imagen Cosmetics</div>
@@ -567,7 +563,6 @@ const fmt = n => '$' + Math.round(n||0).toLocaleString('es-CO');
 
 /* ---------- Descuento / totales editables ---------- */
 let discountPercent = 0;
-let manualIva = null;
 let manualTotal = null;
 
 /* ---------- Código de seguridad (protege precios e historial) ---------- */
@@ -784,8 +779,14 @@ function updateDocNumber(){
 /* ---------- Catálogo ---------- */
 function renderCatalog(filter=''){
   const list = document.getElementById('catalogList');
+  const countEl = document.getElementById('catalogCount');
   const f = filter.trim().toLowerCase();
   const items = catalog.filter(p => !f || p.name.toLowerCase().includes(f) || p.code.toLowerCase().includes(f));
+  if(countEl){
+    countEl.textContent = f
+      ? `Mostrando ${items.length} de ${catalog.length} producto${catalog.length===1?'':'s'}`
+      : `${catalog.length} producto${catalog.length===1?'':'s'} registrado${catalog.length===1?'':'s'}`;
+  }
   if(items.length === 0){
     list.innerHTML = '<div class="empty-catalog">' + (catalog.length===0 ? 'Aún no hay productos. Agrega uno o importa un Excel.' : 'Sin resultados.') + '</div>';
     return;
@@ -794,7 +795,7 @@ function renderCatalog(filter=''){
     <div class="catalog-item">
       <div class="info">
         <div class="code">${escapeHtml(p.code)} · IVA ${p.iva}%</div>
-        <div class="name">${escapeHtml(p.name)}</div>
+        <div class="name" title="${escapeAttr(p.name)}">${escapeHtml(p.name)}</div>
       </div>
       <div class="price">${fmt(p.price)}</div>
       <div class="actions">
@@ -1098,7 +1099,6 @@ function renderCart(){
         <td>${escapeHtml(item.name)}</td>
         <td class="num"><input type="number" class="qty-input" min="1" value="${item.qty}" onchange="updateQty(${idx}, this.value)"></td>
         <td class="num">${fmt(item.price)}</td>
-        <td class="num">${item.iva}%</td>
         <td class="num">${fmt(lineTotal)}</td>
         <td><button class="icon-btn danger" onclick="removeFromCart(${idx})">✕</button></td>
       </tr>`;
@@ -1106,7 +1106,6 @@ function renderCart(){
   }
   // Cualquier cambio en los productos del documento invalida un total escrito a mano
   // (pero conserva el % de descuento, que sigue aplicando sobre el nuevo subtotal).
-  manualIva = null;
   manualTotal = null;
   computeTotals();
 }
@@ -1131,19 +1130,16 @@ async function clearCart(){
 function onDiscountChange(){
   const v = parseFloat(document.getElementById('discountPercent').value);
   discountPercent = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
-  manualIva = null;
   manualTotal = null;
   computeTotals();
 }
 function onManualTotalChange(field, val){
   const num = val === '' ? null : parseFloat(val);
   const clean = (num === null || isNaN(num)) ? null : num;
-  if(field === 'iva') manualIva = clean;
   if(field === 'total') manualTotal = clean;
   computeTotals();
 }
 function resetManualTotals(){
-  manualIva = null;
   manualTotal = null;
   discountPercent = 0;
   document.getElementById('discountPercent').value = 0;
@@ -1153,44 +1149,34 @@ function resetManualTotals(){
 function computeTotals(){
   // IMPORTANTE: item.price ya viene CON IVA incluido (es el precio final al
   // cliente, tal como sale del "Precio de Venta Sugerido" del plan de negocios).
-  // Por eso el IVA se EXTRAE de ese precio, nunca se suma encima.
-  let totalConIvaRaw = 0, ivaRaw = 0;
+  // Por eso aquí ya NO se calcula ni se suma/resta ningún IVA por separado:
+  // el precio de cada producto ES el precio final, punto.
+  let subtotalRaw = 0;
   cart.forEach(i => {
-    const totalItem = i.price * i.qty;              // ya incluye IVA
-    const baseItem = totalItem / (1 + i.iva/100);    // valor sin IVA
-    totalConIvaRaw += totalItem;
-    ivaRaw += (totalItem - baseItem);
+    subtotalRaw += i.price * i.qty;
   });
-  const subtotalRaw = totalConIvaRaw - ivaRaw; // base sin IVA, sin descuento
 
-  // El descuento se aplica UNA sola vez, sobre el Total (con IVA).
-  // El mismo factor se refleja proporcionalmente en el subtotal y en el IVA,
-  // así que descontar el total también "quita" IVA en la misma proporción.
+  // El descuento se aplica UNA sola vez, sobre el Total.
   const factor = 1 - (discountPercent/100);
-  const totalAuto = totalConIvaRaw * factor;
-  const discountAmount = totalConIvaRaw - totalAuto;
-  const subtotal = subtotalRaw * factor;
-  const ivaAuto = ivaRaw * factor;
-  const ivaTotal = manualIva !== null ? manualIva : ivaAuto;
+  const totalAuto = subtotalRaw * factor;
+  const discountAmount = subtotalRaw - totalAuto;
   const total = manualTotal !== null ? manualTotal : totalAuto;
 
-  document.getElementById('totalSubtotal').textContent = fmt(subtotal);
+  document.getElementById('totalSubtotal').textContent = fmt(subtotalRaw);
   document.getElementById('totalDescuento').textContent = '-' + fmt(discountAmount);
 
-  const ivaInput = document.getElementById('totalIvaInput');
   const totalInput = document.getElementById('totalGrandInput');
-  if(document.activeElement !== ivaInput) ivaInput.value = Math.round(ivaTotal);
   if(document.activeElement !== totalInput) totalInput.value = Math.round(total);
 
   document.getElementById('totalsResetWrap').style.display =
-    (manualIva !== null || manualTotal !== null || discountPercent > 0) ? 'block' : 'none';
+    (manualTotal !== null || discountPercent > 0) ? 'block' : 'none';
 
-  return {subtotal, ivaTotal, total, subtotalRaw, discountAmount};
+  return {subtotal: subtotalRaw, total, subtotalRaw, discountAmount};
 }
 
 /* ---------- Preparar documento imprimible ---------- */
 function buildPrintable(){
-  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const {subtotal, total, discountAmount} = computeTotals();
   const descLine = document.getElementById('pDescuentoLine');
   if(discountPercent > 0 && discountAmount > 0){
     descLine.style.display = 'flex';
@@ -1214,12 +1200,11 @@ function buildPrintable(){
 
   document.getElementById('pTableBody').innerHTML = cart.map(item => {
     const lineTotal = item.price * item.qty;
-    return `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="num">${item.qty}</td><td class="num">${fmt(item.price)}</td><td class="num">${item.iva}%</td><td class="num">${fmt(lineTotal)}</td></tr>`;
+    return `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="num">${item.qty}</td><td class="num">${fmt(item.price)}</td><td class="num">${fmt(lineTotal)}</td></tr>`;
   }).join('');
   document.getElementById('pSubtotal').textContent = fmt(subtotal);
-  document.getElementById('pIva').textContent = fmt(ivaTotal);
   document.getElementById('pGrand').textContent = fmt(total);
-  return {subtotal, ivaTotal, total};
+  return {subtotal, total};
 }
 
 /* ---------- Imprimir ---------- */
@@ -1238,7 +1223,7 @@ async function advanceDocNumber(){
 
 /* ---------- Historial de clientes ---------- */
 async function saveDocumentToHistory(){
-  const {subtotal, ivaTotal, total} = computeTotals();
+  const {subtotal, total} = computeTotals();
   const record = {
     docNumber: document.getElementById('docNumber').value,
     mode: mode,
@@ -1246,7 +1231,7 @@ async function saveDocumentToHistory(){
     clientCedula: document.getElementById('clientCedula').value.trim(),
     clientPhone: document.getElementById('clientPhone').value.trim(),
     items: cart.map(i => ({code:i.code, name:i.name, qty:i.qty, price:i.price, iva:i.iva})),
-    subtotal, ivaTotal, total
+    subtotal, ivaTotal: 0, total
   };
   try{
     await apiSend('/api/documents', 'POST', record);
@@ -1299,17 +1284,16 @@ function openHistoryModal(id){
     (doc.mode === 'factura' ? 'Factura ' : 'Cotización ') + (doc.doc_number || '');
   const itemsRows = (doc.items || []).map(i => {
     const lt = i.price * i.qty;
-    return `<tr><td>${escapeHtml(i.code)}</td><td>${escapeHtml(i.name)}</td><td class="num">${i.qty}</td><td class="num">${fmt(i.price)}</td><td class="num">${i.iva}%</td><td class="num">${fmt(lt)}</td></tr>`;
+    return `<tr><td>${escapeHtml(i.code)}</td><td>${escapeHtml(i.name)}</td><td class="num">${i.qty}</td><td class="num">${fmt(i.price)}</td><td class="num">${fmt(lt)}</td></tr>`;
   }).join('');
   document.getElementById('historyModalBody').innerHTML = `
     <div class="hm-client"><b>Cliente:</b> ${escapeHtml(doc.client_name || 'Consumidor final')}${doc.client_cedula ? ' · CC ' + escapeHtml(doc.client_cedula) : ''}${doc.client_phone ? ' · ' + escapeHtml(doc.client_phone) : ''}</div>
     <table class="cart hm-table">
-      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">IVA</th><th class="num">Total</th></tr></thead>
+      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">Total</th></tr></thead>
       <tbody>${itemsRows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Sin productos</td></tr>'}</tbody>
     </table>
     <div class="totals hm-totals">
       <div class="line"><span>Subtotal</span><span>${fmt(doc.subtotal)}</span></div>
-      <div class="line"><span>IVA</span><span>${fmt(doc.iva_total)}</span></div>
       <div class="line grand"><span>Total</span><span>${fmt(doc.total)}</span></div>
     </div>
   `;
@@ -1345,13 +1329,12 @@ function renderHmEditBody(){
       <td>${escapeHtml(i.name)}</td>
       <td class="num"><input type="number" min="1" class="qty-input" value="${i.qty}" onchange="hmUpdateItem(${idx},'qty',this.value)"></td>
       <td class="num"><input type="number" min="0" class="qty-input" style="width:90px" value="${i.price}" onchange="hmUpdateItem(${idx},'price',this.value)"></td>
-      <td class="num"><input type="number" min="0" max="100" class="qty-input" style="width:60px" value="${i.iva}" onchange="hmUpdateItem(${idx},'iva',this.value)"></td>
       <td class="num">${fmt(lt)}</td>
       <td><button class="icon-btn danger" onclick="hmRemoveItem(${idx})">✕</button></td>
     </tr>`;
   }).join('');
-  let subtotal = 0, ivaTotal = 0;
-  historyEditWorking.forEach(i => { const total_i = i.price * i.qty; const base_i = total_i / (1 + i.iva/100); subtotal += base_i; ivaTotal += (total_i - base_i); });
+  let subtotal = 0;
+  historyEditWorking.forEach(i => { subtotal += i.price * i.qty; });
   document.getElementById('historyModalBody').innerHTML = `
     <div class="row cols-3" style="margin-bottom:12px;">
       <div><label>Cliente</label><input type="text" id="hmClientName" value="${escapeAttr(historyEditClient.name)}" onchange="historyEditClient.name=this.value"></div>
@@ -1359,13 +1342,12 @@ function renderHmEditBody(){
       <div><label>Teléfono</label><input type="text" id="hmClientPhone" value="${escapeAttr(historyEditClient.phone)}" onchange="historyEditClient.phone=this.value"></div>
     </div>
     <table class="cart hm-table">
-      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">IVA</th><th class="num">Total</th><th></th></tr></thead>
+      <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio (IVA incl.)</th><th class="num">Total</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:14px;">Sin productos</td></tr>'}</tbody>
     </table>
     <div class="totals hm-totals">
       <div class="line"><span>Subtotal</span><span>${fmt(subtotal)}</span></div>
-      <div class="line"><span>IVA</span><span>${fmt(ivaTotal)}</span></div>
-      <div class="line grand"><span>Total</span><span>${fmt(subtotal + ivaTotal)}</span></div>
+      <div class="line grand"><span>Total</span><span>${fmt(subtotal)}</span></div>
     </div>
   `;
 }
@@ -1379,9 +1361,10 @@ function hmRemoveItem(idx){
   renderHmEditBody();
 }
 async function saveHistoryEdit(){
-  let subtotal = 0, ivaTotal = 0;
-  historyEditWorking.forEach(i => { const total_i = i.price * i.qty; const base_i = total_i / (1 + i.iva/100); subtotal += base_i; ivaTotal += (total_i - base_i); });
-  const total = subtotal + ivaTotal;
+  let subtotal = 0;
+  historyEditWorking.forEach(i => { subtotal += i.price * i.qty; });
+  const ivaTotal = 0;
+  const total = subtotal;
   const payload = {
     clientName: historyEditClient.name.trim() || 'Consumidor final',
     clientCedula: historyEditClient.cedula.trim(),
@@ -1417,7 +1400,7 @@ async function deleteHistoryDoc(id){
 async function downloadPdf(){
   if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
   if(printFormat === 'recibo'){ downloadPdfRecibo(); return; }
-  const {subtotal, ivaTotal, total, discountAmount} = buildPrintable();
+  const {subtotal, total, discountAmount} = buildPrintable();
   const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -1456,28 +1439,26 @@ async function downloadPdf(){
 
   doc.autoTable({
     startY: 47,
-    head: [['Código','Producto','Cant.','Precio','IVA','Total']],
+    head: [['Código','Producto','Cant.','Precio','Total']],
     body: cart.map(item => [
-      item.code, item.name, String(item.qty), fmt(item.price), item.iva+'%',
+      item.code, item.name, String(item.qty), fmt(item.price),
       fmt(item.price * item.qty)
     ]),
     headStyles: { fillColor:[241,228,204], textColor:[110,42,56], fontStyle:'bold' },
     styles: { fontSize:9, cellPadding:4 },
-    columnStyles: { 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'} },
+    columnStyles: { 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
   });
 
   const finalY = doc.lastAutoTable.finalY + 8;
   doc.setFontSize(10);
   doc.text('Subtotal', 150, finalY);
-  doc.text(fmt(subtotal + discountAmount), 196, finalY, {align:'right'});
+  doc.text(fmt(subtotal), 196, finalY, {align:'right'});
   let offsetY = 0;
   if(showDiscount){
     doc.text('Descuento (' + discountPercent + '%)', 150, finalY+6);
     doc.text('-' + fmt(discountAmount), 196, finalY+6, {align:'right'});
     offsetY = 6;
   }
-  doc.text('IVA', 150, finalY+6+offsetY);
-  doc.text(fmt(ivaTotal), 196, finalY+6+offsetY, {align:'right'});
   doc.setFont('helvetica','bold');
   doc.setFontSize(13);
   doc.setTextColor(110,42,56);
@@ -1498,7 +1479,7 @@ async function downloadPdf(){
 
 /* ---------- Descargar PDF formato recibo (80mm, alargado hacia abajo) ---------- */
 function downloadPdfRecibo(){
-  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const {subtotal, total, discountAmount} = computeTotals();
   const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
   const W = 80; // ancho fijo en mm (tipo ticket)
@@ -1559,7 +1540,7 @@ function downloadPdfRecibo(){
     y += nameLines.length * 3.4 + 1;
     doc.setFont('helvetica','normal');
     doc.setTextColor(140,115,120);
-    doc.text(`${item.qty} x ${fmt(item.price)} (IVA ${item.iva}%)`, 4, y);
+    doc.text(`${item.qty} x ${fmt(item.price)}`, 4, y);
     doc.setTextColor(110,42,56);
     doc.text(fmt(lineTotal), W-4, y, {align:'right'});
     y += 5;
@@ -1573,11 +1554,11 @@ function downloadPdfRecibo(){
 
   doc.setFontSize(8);
   doc.setTextColor(40,30,32);
-  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal + discountAmount), W-4, y, {align:'right'}); y += 4.5;
+  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal), W-4, y, {align:'right'}); y += 4.5;
   if(showDiscount){
     doc.text('Descuento (' + discountPercent + '%)', 4, y); doc.text('-' + fmt(discountAmount), W-4, y, {align:'right'}); y += 4.5;
   }
-  doc.text('IVA', 4, y); doc.text(fmt(ivaTotal), W-4, y, {align:'right'}); y += 5.5;
+  y += 1;
   doc.setFont('helvetica','bold');
   doc.setFontSize(11);
   doc.setTextColor(110,42,56);
@@ -1598,7 +1579,7 @@ function downloadPdfRecibo(){
 /* ---------- Compartir por WhatsApp ---------- */
 function shareWhatsapp(){
   if(cart.length===0){ toast('Agrega productos antes de compartir'); return; }
-  const {subtotal, ivaTotal, total, discountAmount} = computeTotals();
+  const {subtotal, total, discountAmount} = computeTotals();
   const showDiscount = discountPercent > 0 && discountAmount > 0;
   const cName = document.getElementById('clientName').value.trim();
   const cCedula = document.getElementById('clientCedula').value.trim();
@@ -1612,9 +1593,8 @@ function shareWhatsapp(){
     lines.push(`${i.qty} x ${i.name} - ${fmt(lt)}`);
   });
   lines.push('');
-  lines.push(`Subtotal: ${fmt(subtotal + discountAmount)}`);
+  lines.push(`Subtotal: ${fmt(subtotal)}`);
   if(showDiscount) lines.push(`Descuento (${discountPercent}%): -${fmt(discountAmount)}`);
-  lines.push(`IVA: ${fmt(ivaTotal)}`);
   lines.push(`*Total: ${fmt(total)}*`);
   lines.push('');
   lines.push('(Descarga el PDF y adjúntalo en el chat si deseas enviar el documento completo).');
