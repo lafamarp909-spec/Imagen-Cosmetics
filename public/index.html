@@ -214,6 +214,24 @@
     #printable, #printable *{ visibility:visible; }
     #printable{ display:block; position:absolute; top:0; left:0; width:100%; padding:20px; }
   }
+  /* Formato recibo: angosto y alargado hacia abajo (para impresoras de tickets o rollo) */
+  #printable.formato-recibo{ width:80mm; padding:6px; font-size:11px; }
+  #printable.formato-recibo .p-head{ flex-direction:column; gap:8px; border-bottom:2px dashed var(--wine); padding-bottom:8px; margin-bottom:8px; }
+  #printable.formato-recibo .p-doc{ text-align:left; }
+  #printable.formato-recibo .p-brand{ gap:8px; }
+  #printable.formato-recibo .p-logo{ width:38px; height:38px; font-size:15px; }
+  #printable.formato-recibo .p-brand .name{ font-size:15px; }
+  #printable.formato-recibo .p-doc .type{ font-size:10px; }
+  #printable.formato-recibo .p-doc .num{ font-size:14px; }
+  #printable.formato-recibo table.p-table{ font-size:10px; }
+  #printable.formato-recibo table.p-table th{ padding:4px 3px; font-size:8px; }
+  #printable.formato-recibo table.p-table td{ padding:4px 3px; }
+  #printable.formato-recibo .p-totals{ width:100%; font-size:11px; }
+  #printable.formato-recibo .p-totals .l.grand{ font-size:13px; }
+  #printable.formato-recibo .p-footer{ font-size:9px; margin-top:14px; }
+  .format-toggle{ display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .format-toggle label{ margin:0; }
+  .format-toggle select{ width:auto; padding:7px 10px; font-size:13px; }
   .p-head{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid var(--wine); padding-bottom:14px; margin-bottom:14px; }
   .p-brand{ display:flex; gap:14px; align-items:center; }
   .p-logo{ width:56px; height:56px; border-radius:50%; overflow:hidden; background:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-family:'Playfair Display',serif; font-weight:700; color:var(--wine-dark); font-size:22px; }
@@ -235,6 +253,7 @@
   .p-totals .l.grand{ font-weight:800; font-size:16px; border-top:2px solid var(--wine); padding-top:8px; margin-top:4px; }
   .p-footer{ margin-top:26px; font-size:11px; color:var(--muted); text-align:center; }
 </style>
+<style id="printPageStyle"></style>
 </head>
 <body>
 
@@ -277,7 +296,7 @@
       </div>
       <div class="catalog-list" id="catalogList"></div>
 
-      <details class="collapse">
+      <details class="collapse" id="addProductDetails">
         <summary><span class="chev">▸</span> Agregar producto nuevo</summary>
         <div class="body">
           <div class="row cols-2">
@@ -297,8 +316,22 @@
                 <option value="0">0% (exento)</option>
               </select>
             </div>
+            <div style="display:flex; align-items:flex-end; gap:8px;">
+              <button class="btn btn-primary btn-block" id="saveProductBtn" onclick="addProductManual()">+ Guardar producto</button>
+            </div>
+          </div>
+          <button class="btn btn-ghost btn-block" id="cancelEditBtn" style="display:none; margin-top:8px;" onclick="cancelEditProduct()">Cancelar edición</button>
+        </div>
+      </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Actualizar precios de todos los productos</summary>
+        <div class="body">
+          <p class="sub" style="margin-bottom:8px;">Sube o baja el precio de TODO el catálogo a la vez, por porcentaje. Usa negativo para bajar (ej. -10).</p>
+          <div class="row cols-2">
+            <div><label>Porcentaje (%)</label><input type="number" id="bulkPercent" placeholder="Ej. 10 o -10"></div>
             <div style="display:flex; align-items:flex-end;">
-              <button class="btn btn-primary btn-block" onclick="addProductManual()">+ Guardar producto</button>
+              <button class="btn btn-primary btn-block" onclick="bulkUpdatePrices()">Aplicar a todos</button>
             </div>
           </div>
         </div>
@@ -347,6 +380,16 @@
           <button class="btn btn-ghost btn-block" onclick="downloadBackup()">⬇ Descargar respaldo</button>
         </div>
       </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Vaciar catálogo</summary>
+        <div class="body">
+          <p style="font-size:13px;color:var(--danger);margin:0 0 10px">
+            Esto borra <b>todos</b> los productos del catálogo (no la cotización actual). No se puede deshacer. Descarga un respaldo antes si no estás seguro.
+          </p>
+          <button class="btn btn-block" style="background:var(--danger); color:#fff;" onclick="clearCatalog()">🗑 Borrar todo el catálogo</button>
+        </div>
+      </details>
     </div>
   </div>
 
@@ -361,6 +404,14 @@
         <div><label>Cédula</label><input type="text" id="clientCedula" placeholder="N.° documento"></div>
         <div><label>Teléfono</label><input type="text" id="clientPhone" placeholder="300 000 0000"></div>
         <div><label>N.° factura</label><input type="text" id="docNumber" readonly></div>
+      </div>
+
+      <div class="format-toggle">
+        <label>Formato de impresión</label>
+        <select id="printFormat" onchange="setPrintFormat(this.value)">
+          <option value="carta">Carta (hoja normal)</option>
+          <option value="recibo">Recibo angosto (alargado hacia abajo)</option>
+        </select>
       </div>
 
       <div class="divider"></div>
@@ -438,6 +489,7 @@
 let catalog = [];      // {code, name, price, iva}
 let cart = [];         // {code, name, price, iva, qty}
 let mode = 'cotizacion';
+let printFormat = 'carta';
 let bizInfo = { name:'Imagen Cosmetics', nit:'', phone:'', address:'' };
 let logoDataUrl = null;
 let docCounter = 1;
@@ -509,6 +561,20 @@ function setMode(m){
   document.getElementById('docSub').textContent = m==='factura'
     ? 'Documento de venta con IVA discriminado, listo para imprimir o enviar.'
     : 'Precio estimado para el cliente, sin compromiso de venta.';
+}
+
+/* ---------- Formato de impresión (Carta / Recibo angosto) ---------- */
+function setPrintFormat(f){
+  printFormat = f;
+  const pageStyle = document.getElementById('printPageStyle');
+  const printable = document.getElementById('printable');
+  if(f === 'recibo'){
+    pageStyle.textContent = '@page{ size:80mm auto; margin:4mm; }';
+    printable.classList.add('formato-recibo');
+  } else {
+    pageStyle.textContent = '';
+    printable.classList.remove('formato-recibo');
+  }
 }
 
 /* ---------- Logo ---------- */
@@ -610,6 +676,7 @@ function renderCatalog(filter=''){
       <div class="price">${fmt(p.price)}</div>
       <div class="actions">
         <button class="icon-btn" title="Agregar" onclick="addToCartByCode('${escapeAttr(p.code)}')">+</button>
+        <button class="icon-btn" title="Editar" onclick="startEditProduct('${escapeAttr(p.code)}')">✎</button>
         <button class="icon-btn danger" title="Eliminar" onclick="deleteProduct('${escapeAttr(p.code)}')">✕</button>
       </div>
     </div>
@@ -621,6 +688,33 @@ function findProduct(code){
   return catalog.find(p => p.code.toLowerCase() === code.trim().toLowerCase());
 }
 
+let editingCode = null;
+
+function startEditProduct(code){
+  const p = findProduct(code);
+  if(!p) return;
+  editingCode = code;
+  document.getElementById('newCode').value = p.code;
+  document.getElementById('newName').value = p.name;
+  document.getElementById('newPrice').value = p.price;
+  document.getElementById('newIva').value = String(p.iva);
+  document.getElementById('saveProductBtn').textContent = '✓ Guardar cambios';
+  document.getElementById('cancelEditBtn').style.display = 'block';
+  const details = document.getElementById('addProductDetails');
+  details.open = true;
+  details.scrollIntoView({behavior:'smooth', block:'nearest'});
+  document.getElementById('newPrice').focus();
+}
+
+function cancelEditProduct(){
+  editingCode = null;
+  document.getElementById('newCode').value='';
+  document.getElementById('newName').value='';
+  document.getElementById('newPrice').value='';
+  document.getElementById('saveProductBtn').textContent = '+ Guardar producto';
+  document.getElementById('cancelEditBtn').style.display = 'none';
+}
+
 async function addProductManual(){
   const code = document.getElementById('newCode').value.trim();
   const name = document.getElementById('newName').value.trim();
@@ -630,6 +724,10 @@ async function addProductManual(){
     toast('Completa código, nombre y precio');
     return;
   }
+  // Si estábamos editando un producto y cambiaron el código, elimina el original
+  if(editingCode && editingCode.toLowerCase() !== code.toLowerCase()){
+    catalog = catalog.filter(p => p.code.toLowerCase() !== editingCode.toLowerCase());
+  }
   const existing = findProduct(code);
   if(existing){
     existing.name = name; existing.price = price; existing.iva = iva;
@@ -638,16 +736,40 @@ async function addProductManual(){
   }
   await saveCatalog();
   renderCatalog(document.getElementById('catalogSearch').value);
-  document.getElementById('newCode').value='';
-  document.getElementById('newName').value='';
-  document.getElementById('newPrice').value='';
-  toast('Producto guardado en el catálogo');
+  const wasEditing = !!editingCode;
+  cancelEditProduct();
+  toast(wasEditing ? 'Producto actualizado' : 'Producto guardado en el catálogo');
 }
 
 async function deleteProduct(code){
   catalog = catalog.filter(p => p.code !== code);
   await saveCatalog();
   renderCatalog(document.getElementById('catalogSearch').value);
+}
+
+async function bulkUpdatePrices(){
+  const pct = parseFloat(document.getElementById('bulkPercent').value);
+  if(isNaN(pct)){ toast('Ingresa un porcentaje válido'); return; }
+  if(catalog.length === 0){ toast('El catálogo está vacío'); return; }
+  const ok = confirm(`¿Aplicar ${pct > 0 ? '+' : ''}${pct}% al precio de los ${catalog.length} productos del catálogo?`);
+  if(!ok) return;
+  catalog.forEach(p => { p.price = Math.round(p.price * (1 + pct/100)); });
+  await saveCatalog();
+  renderCatalog(document.getElementById('catalogSearch').value);
+  document.getElementById('bulkPercent').value = '';
+  toast(`Precios actualizados ${pct > 0 ? '+' : ''}${pct}%`);
+}
+
+async function clearCatalog(){
+  if(catalog.length === 0){ toast('El catálogo ya está vacío'); return; }
+  const ok = confirm('¿Seguro que quieres borrar TODOS los productos del catálogo? Esta acción no se puede deshacer.');
+  if(!ok) return;
+  const ok2 = confirm('Confirma una vez más: se eliminarán los ' + catalog.length + ' productos guardados.');
+  if(!ok2) return;
+  catalog = [];
+  await saveCatalog();
+  renderCatalog();
+  toast('Catálogo vaciado por completo');
 }
 
 /* ---------- Importar / exportar Excel ---------- */
@@ -969,6 +1091,7 @@ function renderHistory(filter=''){
 /* ---------- Descargar PDF ---------- */
 async function downloadPdf(){
   if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
+  if(printFormat === 'recibo'){ downloadPdfRecibo(); return; }
   const {subtotal, ivaTotal, total} = buildPrintable();
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
@@ -1037,6 +1160,101 @@ async function downloadPdf(){
   const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '.pdf';
   doc.save(fname);
   toast('PDF descargado');
+  saveDocumentToHistory();
+  advanceDocNumber();
+}
+
+/* ---------- Descargar PDF formato recibo (80mm, alargado hacia abajo) ---------- */
+function downloadPdfRecibo(){
+  const {subtotal, ivaTotal, total} = computeTotals();
+  const { jsPDF } = window.jspdf;
+  const W = 80; // ancho fijo en mm (tipo ticket)
+  // Alto dinámico: crece hacia abajo según la cantidad de productos
+  const rowsHeight = cart.reduce((acc, item) => acc + (item.name.length > 22 ? 12 : 8), 0);
+  const H = 55 + rowsHeight + 30; // encabezado + filas + totales/footer
+  const doc = new jsPDF({ unit:'mm', format:[W, H] });
+  const cx = W/2;
+
+  let y = 8;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.setTextColor(110,42,56);
+  doc.text(bizInfo.name || 'Imagen Cosmetics', cx, y, {align:'center'});
+  y += 5;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7);
+  doc.setTextColor(140,115,120);
+  const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
+  if(metaParts.length){ doc.text(metaParts.join(' · '), cx, y, {align:'center'}); y += 4; }
+
+  y += 2;
+  doc.setDrawColor(110,42,56);
+  doc.setLineDash([1,1], 0);
+  doc.line(4, y, W-4, y);
+  doc.setLineDash([], 0);
+  y += 5;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(9);
+  doc.setTextColor(110,42,56);
+  doc.text((mode==='factura' ? 'FACTURA DE VENTA' : 'COTIZACIÓN'), 4, y);
+  y += 4;
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(40,30,32);
+  doc.text(document.getElementById('docNumber').value + ' · ' + new Date().toLocaleDateString('es-CO'), 4, y);
+  y += 5;
+
+  const cName = document.getElementById('clientName').value.trim() || 'Consumidor final';
+  const cCedula = document.getElementById('clientCedula').value.trim();
+  doc.text('Cliente: ' + cName + (cCedula ? ' · CC '+cCedula : ''), 4, y);
+  y += 5;
+
+  doc.setDrawColor(110,42,56);
+  doc.setLineDash([1,1], 0);
+  doc.line(4, y, W-4, y);
+  doc.setLineDash([], 0);
+  y += 5;
+
+  doc.setFontSize(7.5);
+  cart.forEach(item => {
+    const lineTotal = item.price * item.qty * (1 + item.iva/100);
+    doc.setFont('helvetica','bold');
+    doc.setTextColor(40,30,32);
+    const nameLines = doc.splitTextToSize(item.name, W-8);
+    doc.text(nameLines, 4, y);
+    y += nameLines.length * 3.4 + 1;
+    doc.setFont('helvetica','normal');
+    doc.setTextColor(140,115,120);
+    doc.text(`${item.qty} x ${fmt(item.price)} (IVA ${item.iva}%)`, 4, y);
+    doc.setTextColor(110,42,56);
+    doc.text(fmt(lineTotal), W-4, y, {align:'right'});
+    y += 5;
+  });
+
+  doc.setDrawColor(110,42,56);
+  doc.setLineDash([1,1], 0);
+  doc.line(4, y, W-4, y);
+  doc.setLineDash([], 0);
+  y += 5;
+
+  doc.setFontSize(8);
+  doc.setTextColor(40,30,32);
+  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal), W-4, y, {align:'right'}); y += 4.5;
+  doc.text('IVA', 4, y); doc.text(fmt(ivaTotal), W-4, y, {align:'right'}); y += 5.5;
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(11);
+  doc.setTextColor(110,42,56);
+  doc.text('Total', 4, y); doc.text(fmt(total), W-4, y, {align:'right'}); y += 8;
+
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(140,115,120);
+  doc.text('Gracias por su compra · ' + (bizInfo.name || 'Imagen Cosmetics'), cx, y, {align:'center'});
+
+  const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '-recibo.pdf';
+  doc.save(fname);
+  toast('PDF (formato recibo) descargado');
   saveDocumentToHistory();
   advanceDocNumber();
 }
