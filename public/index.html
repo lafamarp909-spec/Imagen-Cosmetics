@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imagen Cosmetics · Facturación</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/jspdf.plugin.autotable.min.js"></script>
+<style>
+  :root{
+    --bg: #FBF6F2;
+    --surface: #FFFFFF;
+    --line: #ECE0DA;
+    --wine: #6E2A38;
+    --wine-dark: #501D28;
+    --gold: #C9A66B;
+    --gold-soft: #F1E4CC;
+    --ink: #2B1F22;
+    --muted: #8C7378;
+    --sage: #4F7A5B;
+    --sage-soft: #E7F0E9;
+    --danger: #B3492F;
+    --radius: 14px;
+    --shadow: 0 2px 10px rgba(80,29,40,.06), 0 12px 30px -18px rgba(80,29,40,.18);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--gold-soft);}
+
+  /* barcode signature strip */
+  .barcode-strip{
+    height:14px;
+    width:100%;
+    background-image: repeating-linear-gradient(90deg,
+      var(--wine) 0px, var(--wine) 2px,
+      transparent 2px, transparent 5px,
+      var(--wine) 5px, var(--wine) 6px,
+      transparent 6px, transparent 11px,
+      var(--wine) 11px, var(--wine) 14px,
+      transparent 14px, transparent 17px);
+    opacity:.85;
+  }
+
+  header.topbar{
+    background: linear-gradient(180deg, var(--wine) 0%, var(--wine-dark) 100%);
+    color: #fff;
+    padding: 22px 28px 18px;
+  }
+  .topbar-inner{
+    max-width:1280px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:16px; }
+  .brand-logo{
+    width:52px; height:52px; border-radius:50%;
+    background: var(--gold-soft); color:var(--wine-dark);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Playfair Display', serif; font-weight:700; font-size:22px;
+    overflow:hidden; flex-shrink:0; cursor:pointer; border:2px solid rgba(255,255,255,.5);
+    position:relative;
+  }
+  .brand-logo img{width:100%;height:100%;object-fit:cover;}
+  .brand-logo .logo-hint{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(80,29,40,.55); color:#fff; font-size:9px; font-weight:600;
+    opacity:0; transition:opacity .15s; text-align:center; line-height:1.2; padding:2px;
+  }
+  .brand-logo:hover .logo-hint{opacity:1;}
+  .brand-text .name{
+    font-family:'Playfair Display', serif; font-weight:700; font-size:26px; letter-spacing:.3px; line-height:1.1;
+  }
+  .brand-text .tag{ font-size:12.5px; color:var(--gold-soft); opacity:.9; margin-top:2px; letter-spacing:.4px;}
+
+  .mode-toggle{ display:flex; background:rgba(255,255,255,.12); border-radius:999px; padding:4px; gap:2px; }
+  .mode-toggle button{
+    border:none; background:transparent; color:#fff; opacity:.75;
+    padding:9px 18px; border-radius:999px; font-size:13.5px; font-weight:600;
+    cursor:pointer; font-family:inherit; transition:.15s;
+  }
+  .mode-toggle button.active{ background:var(--gold); color:var(--wine-dark); opacity:1; }
+
+  main{ max-width:1280px; margin:26px auto 60px; padding:0 28px; display:grid; grid-template-columns: 380px 1fr; gap:22px; }
+  @media (max-width:960px){ main{ grid-template-columns:1fr; } }
+
+  .panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:20px 20px 22px;
+  }
+  .panel + .panel{ margin-top:18px; }
+  .panel h2{
+    font-family:'Playfair Display', serif; font-size:18px; font-weight:600; margin:0 0 4px;
+    display:flex; align-items:center; gap:8px; color:var(--wine-dark);
+  }
+  .panel .sub{ font-size:12.5px; color:var(--muted); margin:0 0 14px; }
+
+  label{ font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:4px; letter-spacing:.2px; }
+  input[type=text], input[type=number], input[type=tel], select{
+    width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:9px;
+    font-family:inherit; font-size:14px; background:#fff; color:var(--ink); transition:.15s;
+  }
+  input:focus, select:focus{ outline:none; border-color:var(--wine); box-shadow:0 0 0 3px rgba(110,42,56,.1); }
+  .row{ display:grid; gap:10px; margin-bottom:10px; }
+  .row.cols-2{ grid-template-columns:1fr 1fr; }
+  .row.cols-3{ grid-template-columns:1.4fr 1fr 1fr; }
+
+  .scan-box{
+    display:flex; align-items:center; gap:10px; background:var(--gold-soft);
+    border:1.5px dashed var(--gold); border-radius:11px; padding:10px 12px; margin-bottom:16px;
+  }
+  .scan-box svg{ flex-shrink:0; color:var(--wine-dark); }
+  .scan-box input{ border:none; background:transparent; font-size:15px; font-weight:600; padding:6px 0; }
+  .scan-box input:focus{ box-shadow:none; }
+  .scan-status{ font-size:11px; color:var(--wine-dark); font-weight:600; white-space:nowrap; }
+
+  .btn{
+    border:none; border-radius:9px; padding:10px 16px; font-family:inherit; font-weight:600;
+    font-size:13.5px; cursor:pointer; transition:.15s; display:inline-flex; align-items:center; gap:7px;
+    justify-content:center;
+  }
+  .btn-primary{ background:var(--wine); color:#fff; }
+  .btn-primary:hover{ background:var(--wine-dark); }
+  .btn-gold{ background:var(--gold); color:var(--wine-dark); }
+  .btn-gold:hover{ filter:brightness(.95); }
+  .btn-ghost{ background:transparent; color:var(--wine); border:1.5px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--wine); background:#fbf3ee; }
+  .btn-sage{ background:var(--sage); color:#fff; }
+  .btn-sage:hover{ filter:brightness(.95); }
+  .btn-block{ width:100%; }
+  .btn-sm{ padding:6px 10px; font-size:12px; }
+  .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+  .divider{ height:1px; background:var(--line); margin:16px 0; }
+
+  .catalog-search{ margin-bottom:10px; }
+  .catalog-list{ max-height:230px; overflow-y:auto; border:1px solid var(--line); border-radius:10px; }
+  .catalog-item{
+    display:flex; align-items:center; gap:8px; padding:9px 10px; border-bottom:1px solid var(--line);
+    font-size:13px;
+  }
+  .catalog-item:last-child{ border-bottom:none; }
+  .catalog-item .info{ flex:1; min-width:0; }
+  .catalog-item .code{ font-size:10.5px; color:var(--muted); font-weight:600; letter-spacing:.3px; }
+  .catalog-item .name{ font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .catalog-item .price{ font-size:12.5px; color:var(--wine-dark); font-weight:700; white-space:nowrap; }
+  .catalog-item .actions{ display:flex; gap:4px; }
+  .icon-btn{
+    border:none; background:var(--gold-soft); color:var(--wine-dark); width:26px; height:26px;
+    border-radius:7px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px;
+  }
+  .icon-btn.danger{ background:#f6e3dd; color:var(--danger); }
+  .icon-btn:hover{ filter:brightness(.95); }
+  .empty-catalog{ padding:22px 10px; text-align:center; color:var(--muted); font-size:13px; }
+
+  details.collapse summary{ cursor:pointer; font-weight:700; font-size:13px; color:var(--wine); list-style:none; display:flex; align-items:center; gap:6px; }
+  details.collapse summary::-webkit-details-marker{ display:none; }
+  details.collapse summary .chev{ transition:.15s; }
+  details.collapse[open] summary .chev{ transform:rotate(90deg); }
+  details.collapse{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); }
+  details.collapse .body{ margin-top:12px; }
+
+  .file-drop{
+    border:1.5px dashed var(--line); border-radius:10px; padding:14px; text-align:center;
+    font-size:12.5px; color:var(--muted); cursor:pointer; transition:.15s;
+  }
+  .file-drop:hover{ border-color:var(--gold); background:var(--gold-soft); }
+
+  /* client + cart */
+  .client-grid{ display:grid; grid-template-columns:1.6fr 1fr 1fr 1fr; gap:10px; }
+  @media (max-width:760px){ .client-grid{ grid-template-columns:1fr 1fr; } }
+  @media (max-width:480px){ .client-grid{ grid-template-columns:1fr; } }
+
+  table.cart{ width:100%; border-collapse:collapse; margin-top:6px; font-size:13.5px; }
+  table.cart thead th{
+    text-align:left; font-size:10.5px; letter-spacing:.4px; text-transform:uppercase;
+    color:var(--muted); border-bottom:2px solid var(--line); padding:8px 6px; font-weight:700;
+  }
+  table.cart tbody td{ padding:9px 6px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  table.cart tbody tr:hover{ background:#fdf9f6; }
+  table.cart td.num, table.cart th.num{ text-align:right; }
+  .qty-input{ width:56px; padding:6px 6px; text-align:center; }
+  .cart-empty{ text-align:center; padding:40px 10px; color:var(--muted); }
+  .cart-empty svg{ opacity:.5; margin-bottom:10px; }
+
+  .totals{ margin-top:16px; margin-left:auto; width:280px; }
+  .totals .line{ display:flex; justify-content:space-between; font-size:13.5px; padding:6px 0; color:var(--muted); }
+  .totals .line.grand{ color:var(--ink); font-weight:800; font-size:19px; border-top:2px solid var(--wine); padding-top:12px; margin-top:6px; }
+  .totals .line.grand span:last-child{ color:var(--wine-dark); font-family:'Playfair Display',serif; }
+
+  .action-bar{ display:flex; gap:10px; margin-top:20px; flex-wrap:wrap; }
+  .action-bar .btn{ flex:1; min-width:150px; }
+
+  .toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:11px 20px; border-radius:9px; font-size:13.5px;
+    font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:999; box-shadow:0 10px 30px rgba(0,0,0,.25);
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* printable invoice, hidden on screen */
+  #printable{ display:none; }
+
+  @media print{
+    body *{ visibility:hidden; }
+    #printable, #printable *{ visibility:visible; }
+    #printable{ display:block; position:absolute; top:0; left:0; width:100%; padding:20px; }
+  }
+  .p-head{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid var(--wine); padding-bottom:14px; margin-bottom:14px; }
+  .p-brand{ display:flex; gap:14px; align-items:center; }
+  .p-logo{ width:56px; height:56px; border-radius:50%; overflow:hidden; background:var(--gold-soft); display:flex; align-items:center; justify-content:center; font-family:'Playfair Display',serif; font-weight:700; color:var(--wine-dark); font-size:22px; }
+  .p-logo img{ width:100%; height:100%; object-fit:cover; }
+  .p-brand .name{ font-family:'Playfair Display',serif; font-weight:700; font-size:22px; color:var(--wine-dark); }
+  .p-brand .meta{ font-size:11.5px; color:var(--muted); line-height:1.5; }
+  .p-doc{ text-align:right; }
+  .p-doc .type{ font-size:13px; font-weight:800; color:var(--wine); letter-spacing:1px; text-transform:uppercase; }
+  .p-doc .num{ font-family:'Playfair Display',serif; font-size:20px; font-weight:700; }
+  .p-doc .date{ font-size:12px; color:var(--muted); }
+  .p-client{ font-size:13px; margin-bottom:14px; color:var(--ink); }
+  .p-client b{ color:var(--wine-dark); }
+  table.p-table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.p-table th{ background:var(--gold-soft); color:var(--wine-dark); text-align:left; padding:7px 8px; font-size:10.5px; text-transform:uppercase; letter-spacing:.3px; }
+  table.p-table td{ padding:7px 8px; border-bottom:1px solid var(--line); }
+  table.p-table td.num, table.p-table th.num{ text-align:right; }
+  .p-totals{ width:260px; margin-left:auto; margin-top:12px; font-size:13px; }
+  .p-totals .l{ display:flex; justify-content:space-between; padding:4px 0; }
+  .p-totals .l.grand{ font-weight:800; font-size:16px; border-top:2px solid var(--wine); padding-top:8px; margin-top:4px; }
+  .p-footer{ margin-top:26px; font-size:11px; color:var(--muted); text-align:center; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-logo" id="logoUpload" title="Subir logo">
+        <span id="logoInitial">IC</span>
+        <img id="logoImg" style="display:none;">
+        <div class="logo-hint">Cambiar<br>logo</div>
+      </div>
+      <input type="file" id="logoFile" accept="image/*" style="display:none;">
+      <div class="brand-text">
+        <div class="name" id="bizNameDisplay">Imagen Cosmetics</div>
+        <div class="tag">Belleza &amp; cuidado del cabello</div>
+      </div>
+    </div>
+    <div class="mode-toggle">
+      <button id="btnModeCotizacion" onclick="setMode('cotizacion')">Cotización</button>
+      <button id="btnModeFactura" onclick="setMode('factura')">Factura</button>
+    </div>
+  </div>
+</header>
+<div class="barcode-strip"></div>
+
+<main>
+  <!-- LEFT: catalog & scanner -->
+  <div>
+    <div class="panel">
+      <h2>Lector de código</h2>
+      <p class="sub">Escanea o escribe el código y presiona Enter para agregar.</p>
+      <div class="scan-box">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M3 4v16M7 4v16M10 4v6M10 14v6M14 4v16M17 4v6M17 14v6M21 4v16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input type="text" id="scanInput" placeholder="Código del producto..." autocomplete="off">
+        <span class="scan-status" id="scanStatus"></span>
+      </div>
+
+      <div class="catalog-search">
+        <input type="text" id="catalogSearch" placeholder="Buscar en catálogo por nombre o código...">
+      </div>
+      <div class="catalog-list" id="catalogList"></div>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Agregar producto nuevo</summary>
+        <div class="body">
+          <div class="row cols-2">
+            <div><label>Código</label><input type="text" id="newCode" placeholder="Ej. SH-001"></div>
+            <div><label>Precio (COP)</label><input type="number" id="newPrice" placeholder="0" min="0"></div>
+          </div>
+          <div class="row">
+            <label>Nombre del producto</label>
+            <input type="text" id="newName" placeholder="Ej. Shampoo reparador 250ml">
+          </div>
+          <div class="row cols-2">
+            <div>
+              <label>IVA</label>
+              <select id="newIva">
+                <option value="19">19% (general)</option>
+                <option value="5">5% (reducido)</option>
+                <option value="0">0% (exento)</option>
+              </select>
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button class="btn btn-primary btn-block" onclick="addProductManual()">+ Guardar producto</button>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Importar / exportar Excel</summary>
+        <div class="body">
+          <p class="sub" style="margin-bottom:8px;">Detecta automáticamente las columnas de producto y precio, aunque el archivo no tenga código o IVA (usa 19% por defecto y genera códigos). Formato recomendado: <b>codigo, nombre, precio, iva</b>.</p>
+          <div class="file-drop" onclick="document.getElementById('excelFile').click()">
+            📄 Haz clic para elegir un archivo .xlsx / .csv
+          </div>
+          <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none;">
+          <div class="row cols-2" style="margin-top:10px;">
+            <button class="btn btn-ghost" onclick="downloadTemplate()">⬇ Descargar plantilla</button>
+            <button class="btn btn-ghost" onclick="exportCatalog()">⬇ Exportar catálogo</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Datos del negocio</summary>
+        <div class="body">
+          <div class="row">
+            <label>Nombre del negocio</label>
+            <input type="text" id="bizName" value="Imagen Cosmetics">
+          </div>
+          <div class="row cols-2">
+            <div><label>NIT / RUT</label><input type="text" id="bizNit" placeholder="Opcional"></div>
+            <div><label>Teléfono</label><input type="text" id="bizPhone" placeholder="Opcional"></div>
+          </div>
+          <div class="row">
+            <label>Dirección</label>
+            <input type="text" id="bizAddress" placeholder="Opcional">
+          </div>
+          <button class="btn btn-ghost btn-block" onclick="saveBizInfo()">Guardar datos</button>
+        </div>
+      </details>
+
+      <details class="collapse">
+        <summary><span class="chev">▸</span> Respaldo</summary>
+        <div class="body">
+          <p style="font-size:13px;color:#8a7060;margin:0 0 10px">
+            Descarga una copia completa de todo (productos, facturas, historial) a tu computador. Hazlo cada tanto por seguridad.
+          </p>
+          <button class="btn btn-ghost btn-block" onclick="downloadBackup()">⬇ Descargar respaldo</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <!-- RIGHT: invoice/quote builder -->
+  <div>
+    <div class="panel">
+      <h2 id="docTitle">Cotización</h2>
+      <p class="sub" id="docSub">Los productos que agregues aparecerán aquí con su precio, IVA y total.</p>
+
+      <div class="client-grid">
+        <div><label>Cliente</label><input type="text" id="clientName" placeholder="Nombre del cliente (opcional)"></div>
+        <div><label>Cédula</label><input type="text" id="clientCedula" placeholder="N.° documento"></div>
+        <div><label>Teléfono</label><input type="text" id="clientPhone" placeholder="300 000 0000"></div>
+        <div><label>N.° factura</label><input type="text" id="docNumber" readonly></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <table class="cart">
+        <thead>
+          <tr>
+            <th>Código</th><th>Producto</th><th class="num">Cant.</th>
+            <th class="num">Precio</th><th class="num">IVA</th><th class="num">Total</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="cartBody"></tbody>
+      </table>
+      <div id="cartEmptyMsg" class="cart-empty">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none"><path d="M3 4v16M7 4v16M10 4v6M10 14v6M14 4v16M17 4v6M17 14v6M21 4v16" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <div>Escanea un código o busca en el catálogo para empezar.</div>
+      </div>
+
+      <div class="totals">
+        <div class="line"><span>Subtotal</span><span id="totalSubtotal">$0</span></div>
+        <div class="line"><span>IVA</span><span id="totalIva">$0</span></div>
+        <div class="line grand"><span>Total</span><span id="totalGrand">$0</span></div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-primary" onclick="printDoc()">🖨 Imprimir</button>
+        <button class="btn btn-gold" onclick="downloadPdf()">⬇ Descargar PDF</button>
+        <button class="btn btn-sage" onclick="shareWhatsapp()">📤 Compartir por WhatsApp</button>
+        <button class="btn btn-ghost" onclick="clearCart()">Vaciar</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Historial de clientes</h2>
+      <p class="sub">Busca por cédula o nombre para ver las facturas y cotizaciones anteriores de un cliente.</p>
+      <input type="text" id="historySearch" placeholder="Buscar por cédula o nombre..." oninput="renderHistory(this.value)">
+      <div class="catalog-list" id="historyList" style="margin-top:10px; max-height:260px;"></div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<!-- Printable / PDF source template -->
+<div id="printable">
+  <div class="p-head">
+    <div class="p-brand">
+      <div class="p-logo" id="pLogo"><span id="pLogoInitial">IC</span></div>
+      <div>
+        <div class="name" id="pBizName">Imagen Cosmetics</div>
+        <div class="meta" id="pBizMeta"></div>
+      </div>
+    </div>
+    <div class="p-doc">
+      <div class="type" id="pDocType">Cotización</div>
+      <div class="num" id="pDocNum">#0001</div>
+      <div class="date" id="pDocDate"></div>
+    </div>
+  </div>
+  <div class="p-client" id="pClient"></div>
+  <table class="p-table">
+    <thead><tr><th>Código</th><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Total</th></tr></thead>
+    <tbody id="pTableBody"></tbody>
+  </table>
+  <div class="p-totals">
+    <div class="l"><span>Subtotal</span><span id="pSubtotal">$0</span></div>
+    <div class="l"><span>IVA</span><span id="pIva">$0</span></div>
+    <div class="l grand"><span>Total</span><span id="pGrand">$0</span></div>
+  </div>
+  <div class="p-footer">Gracias por su compra · Imagen Cosmetics</div>
+</div>
+
+<script>
+/* ---------- Estado ---------- */
+let catalog = [];      // {code, name, price, iva}
+let cart = [];         // {code, name, price, iva, qty}
+let mode = 'cotizacion';
+let bizInfo = { name:'Imagen Cosmetics', nit:'', phone:'', address:'' };
+let logoDataUrl = null;
+let docCounter = 1;
+/* ---------- Persistencia (API del servidor / PostgreSQL) ---------- */
+async function apiGet(url){
+  const res = await fetch(url);
+  if(!res.ok) throw new Error('Error de red: '+url);
+  return res.json();
+}
+async function apiSend(url, method, body){
+  const res = await fetch(url, {
+    method,
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  if(!res.ok) throw new Error('Error de red: '+url);
+  return res.json();
+}
+
+async function loadAll(){
+  try{
+    catalog = await apiGet('/api/products');
+  }catch(e){ console.error(e); catalog = []; toast('No se pudo conectar con el servidor'); }
+  try{
+    const s = await apiGet('/api/settings');
+    if(s.logo){ logoDataUrl = s.logo; applyLogo(); }
+    if(s.business){ bizInfo = {name:'Imagen Cosmetics', nit:'', phone:'', address:'', ...s.business}; applyBizInfo(); }
+    docCounter = s.docCounter || 1;
+  }catch(e){ console.error(e); }
+  renderCatalog();
+  renderHistory();
+  updateDocNumber();
+}
+async function saveCatalog(){
+  try{ await apiSend('/api/products/bulk', 'PUT', {products: catalog}); }
+  catch(e){ console.error(e); toast('No se pudo guardar el catálogo en el servidor'); }
+}
+async function saveLogo(){
+  try{ await apiSend('/api/settings', 'PUT', {logo: logoDataUrl}); }
+  catch(e){ console.error(e); toast('No se pudo guardar el logo'); }
+}
+async function saveBizStorage(){
+  try{ await apiSend('/api/settings', 'PUT', {business: bizInfo}); }
+  catch(e){ console.error(e); toast('No se pudo guardar los datos del negocio'); }
+}
+async function saveCounter(){
+  try{ await apiSend('/api/settings', 'PUT', {docCounter}); }
+  catch(e){ console.error(e); }
+}
+
+/* ---------- Toast ---------- */
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  const duration = Math.min(6000, Math.max(2200, msg.length * 60));
+  toastTimer = setTimeout(()=>t.classList.remove('show'), duration);
+}
+
+/* ---------- Modo factura / cotización ---------- */
+function setMode(m){
+  mode = m;
+  document.getElementById('btnModeCotizacion').classList.toggle('active', m==='cotizacion');
+  document.getElementById('btnModeFactura').classList.toggle('active', m==='factura');
+  document.getElementById('docTitle').textContent = m==='factura' ? 'Factura' : 'Cotización';
+  document.getElementById('docSub').textContent = m==='factura'
+    ? 'Documento de venta con IVA discriminado, listo para imprimir o enviar.'
+    : 'Precio estimado para el cliente, sin compromiso de venta.';
+}
+
+/* ---------- Logo ---------- */
+document.getElementById('logoUpload').addEventListener('click', ()=>document.getElementById('logoFile').click());
+document.getElementById('logoFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    logoDataUrl = reader.result;
+    applyLogo();
+    await saveLogo();
+    toast('Logo actualizado');
+  };
+  reader.readAsDataURL(file);
+});
+function applyLogo(){
+  if(!logoDataUrl) return;
+  document.getElementById('logoImg').src = logoDataUrl;
+  document.getElementById('logoImg').style.display = 'block';
+  document.getElementById('logoInitial').style.display = 'none';
+  document.getElementById('pLogo').innerHTML = '<img src="'+logoDataUrl+'">';
+}
+
+/* ---------- Datos del negocio ---------- */
+function applyBizInfo(){
+  document.getElementById('bizName').value = bizInfo.name || 'Imagen Cosmetics';
+  document.getElementById('bizNit').value = bizInfo.nit || '';
+  document.getElementById('bizPhone').value = bizInfo.phone || '';
+  document.getElementById('bizAddress').value = bizInfo.address || '';
+  document.getElementById('bizNameDisplay').textContent = bizInfo.name || 'Imagen Cosmetics';
+}
+async function saveBizInfo(){
+  bizInfo = {
+    name: document.getElementById('bizName').value.trim() || 'Imagen Cosmetics',
+    nit: document.getElementById('bizNit').value.trim(),
+    phone: document.getElementById('bizPhone').value.trim(),
+    address: document.getElementById('bizAddress').value.trim(),
+  };
+  document.getElementById('bizNameDisplay').textContent = bizInfo.name;
+  await saveBizStorage();
+  toast('Datos del negocio guardados');
+}
+
+/* ---------- Respaldo ---------- */
+async function downloadBackup(){
+  let key = '';
+  try {
+    const check = await fetch('/api/backup');
+    if (check.status === 200) {
+      // No requiere clave (por ejemplo en modo local sin internet)
+      const blob = await check.blob();
+      triggerDownload(blob);
+      return;
+    }
+  } catch(e){}
+  key = prompt('Clave de respaldo (la que configuraste en Railway como BACKUP_KEY):');
+  if (key === null) return;
+  try {
+    const res = await fetch('/api/backup?key=' + encodeURIComponent(key));
+    if (!res.ok) { toast('Clave incorrecta o no se pudo descargar'); return; }
+    const blob = await res.blob();
+    triggerDownload(blob);
+  } catch(e){ toast('No se pudo descargar el respaldo'); }
+}
+function triggerDownload(blob){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const fecha = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `imagen-cosmetics-respaldo-${fecha}.db`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast('Respaldo descargado');
+}
+
+/* ---------- Documento número ---------- */
+function updateDocNumber(){
+  document.getElementById('docNumber').value = '#' + String(docCounter).padStart(4,'0');
+}
+
+/* ---------- Catálogo ---------- */
+function renderCatalog(filter=''){
+  const list = document.getElementById('catalogList');
+  const f = filter.trim().toLowerCase();
+  const items = catalog.filter(p => !f || p.name.toLowerCase().includes(f) || p.code.toLowerCase().includes(f));
+  if(items.length === 0){
+    list.innerHTML = '<div class="empty-catalog">' + (catalog.length===0 ? 'Aún no hay productos. Agrega uno o importa un Excel.' : 'Sin resultados.') + '</div>';
+    return;
+  }
+  list.innerHTML = items.map(p => `
+    <div class="catalog-item">
+      <div class="info">
+        <div class="code">${escapeHtml(p.code)} · IVA ${p.iva}%</div>
+        <div class="name">${escapeHtml(p.name)}</div>
+      </div>
+      <div class="price">${fmt(p.price)}</div>
+      <div class="actions">
+        <button class="icon-btn" title="Agregar" onclick="addToCartByCode('${escapeAttr(p.code)}')">+</button>
+        <button class="icon-btn danger" title="Eliminar" onclick="deleteProduct('${escapeAttr(p.code)}')">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+document.getElementById('catalogSearch').addEventListener('input', e => renderCatalog(e.target.value));
+
+function findProduct(code){
+  return catalog.find(p => p.code.toLowerCase() === code.trim().toLowerCase());
+}
+
+async function addProductManual(){
+  const code = document.getElementById('newCode').value.trim();
+  const name = document.getElementById('newName').value.trim();
+  const price = parseFloat(document.getElementById('newPrice').value);
+  const iva = parseFloat(document.getElementById('newIva').value);
+  if(!code || !name || isNaN(price)){
+    toast('Completa código, nombre y precio');
+    return;
+  }
+  const existing = findProduct(code);
+  if(existing){
+    existing.name = name; existing.price = price; existing.iva = iva;
+  } else {
+    catalog.push({code, name, price, iva});
+  }
+  await saveCatalog();
+  renderCatalog(document.getElementById('catalogSearch').value);
+  document.getElementById('newCode').value='';
+  document.getElementById('newName').value='';
+  document.getElementById('newPrice').value='';
+  toast('Producto guardado en el catálogo');
+}
+
+async function deleteProduct(code){
+  catalog = catalog.filter(p => p.code !== code);
+  await saveCatalog();
+  renderCatalog(document.getElementById('catalogSearch').value);
+}
+
+/* ---------- Importar / exportar Excel ---------- */
+function normalizeKey(k){
+  return String(k).normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase();
+}
+function normalizeHeader(k){
+  return String(k).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+function parsePrice(val){
+  if(typeof val === 'number') return val;
+  let s = String(val).replace(/[^0-9,.-]/g,'').trim();
+  if(!s) return NaN;
+  if(s.includes(',') && s.includes('.')){
+    s = s.replace(/\./g,'').replace(',', '.');
+  } else if(s.includes(',')){
+    const parts = s.split(',');
+    s = (parts.length===2 && parts[1].length<=2) ? s.replace(',', '.') : s.replace(/,/g,'');
+  } else if(s.includes('.')){
+    const parts = s.split('.');
+    if(parts.length>2 || parts[parts.length-1].length===3) s = s.replace(/\./g,'');
+  }
+  return parseFloat(s);
+}
+/* Clasifica un encabezado normalizado. Mayor "priority" = mejor candidato para ese tipo. */
+function classifyHeader(norm){
+  if(!norm) return null;
+  if(norm.includes('codigo') || norm==='sku' || norm.includes('referencia')) return {type:'codigo', priority:1};
+  if(norm.includes('preciodeventasugerido') || norm.includes('preciodeventa') || norm.includes('pvp') || norm.includes('preciosugerido') || norm.includes('preciopublico')) return {type:'precio', priority:3};
+  if(norm.includes('valorventa')) return {type:'precio', priority:3};
+  if(norm.includes('precio') && !norm.includes('costo')) return {type:'precio', priority:2};
+  if(norm.includes('costounitariototal') || (norm.includes('costo') && norm.includes('coniva'))) return {type:'precio', priority:1};
+  if(norm.includes('costo') || norm.includes('valor')) return {type:'precio', priority:0};
+  if(norm.includes('producto') || norm.includes('nombre') || norm.includes('articulo') || norm.includes('descripcion') || norm==='item') return {type:'nombre', priority:1};
+  if(norm.includes('iva')) return {type:'iva', priority:1};
+  return null;
+}
+/* Busca cuál fila del Excel es la de encabezados (la primera que tenga columna de nombre Y de precio) */
+function detectHeaderRow(rows){
+  const limit = Math.min(rows.length, 20);
+  for(let i=0; i<limit; i++){
+    const row = rows[i] || [];
+    const classes = row.map(cell => classifyHeader(normalizeHeader(cell)));
+    const hasNombre = classes.some(c => c && c.type==='nombre');
+    const hasPrecio = classes.some(c => c && c.type==='precio');
+    if(hasNombre && hasPrecio) return i;
+  }
+  return -1;
+}
+function findProductByName(name){
+  const n = name.trim().toLowerCase();
+  return catalog.find(p => p.name.trim().toLowerCase() === n);
+}
+let autoCodeCounter = 1;
+function nextAutoCode(){
+  let code;
+  do{
+    code = 'PRD-' + String(autoCodeCounter).padStart(4,'0');
+    autoCodeCounter++;
+  } while(findProduct(code));
+  return code;
+}
+
+document.getElementById('excelFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async (evt)=>{
+    try{
+      const wb = XLSX.read(evt.target.result, {type:'array'});
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+      const headerIdx = detectHeaderRow(rows);
+      if(headerIdx === -1){
+        toast('No encontré una fila de encabezados con nombre y precio. Revisa el archivo.');
+        return;
+      }
+      const headerRow = rows[headerIdx];
+      // Para cada tipo (codigo/nombre/precio/iva), elegir la columna de mayor prioridad
+      const best = {}; // type -> {col, priority}
+      headerRow.forEach((cell, col) => {
+        const c = classifyHeader(normalizeHeader(cell));
+        if(!c) return;
+        if(!best[c.type] || c.priority > best[c.type].priority){
+          best[c.type] = {col, priority:c.priority};
+        }
+      });
+      const colCodigo = best.codigo ? best.codigo.col : null;
+      const colNombre = best.nombre ? best.nombre.col : null;
+      const colPrecio = best.precio ? best.precio.col : null;
+      const colIva = best.iva ? best.iva.col : null;
+
+      if(colNombre === null || colPrecio === null){
+        toast('No pude identificar las columnas de producto y precio en el archivo.');
+        return;
+      }
+
+      let added = 0, updated = 0, skipped = 0;
+      for(let r = headerIdx+1; r < rows.length; r++){
+        const row = rows[r];
+        if(!row || row.length === 0) continue;
+        const name = String(row[colNombre] ?? '').trim();
+        const price = parsePrice(row[colPrecio]);
+        if(!name || isNaN(price) || price <= 0){ if(name || row.some(x=>x!=='')) skipped++; continue; }
+
+        let iva = colIva !== null ? parsePrice(row[colIva]) : NaN;
+        if(isNaN(iva)) iva = 19; else if(iva > 0 && iva <= 1) iva = iva*100;
+
+        let code = colCodigo !== null ? String(row[colCodigo] ?? '').trim() : '';
+        let existing = code ? findProduct(code) : findProductByName(name);
+        if(existing){
+          existing.name = name; existing.price = price; existing.iva = iva;
+          updated++;
+        } else {
+          if(!code) code = nextAutoCode();
+          catalog.push({code, name, price, iva});
+          added++;
+        }
+      }
+      await saveCatalog();
+      renderCatalog();
+      let msg = `Importado: ${added} nuevos, ${updated} actualizados`;
+      if(skipped>0) msg += `, ${skipped} filas no reconocidas`;
+      if(colCodigo === null) msg += ' (se generaron códigos automáticos)';
+      toast(msg);
+    }catch(err){
+      console.error(err);
+      toast('No se pudo leer el archivo. Revisa el formato.');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+  e.target.value = '';
+});
+
+function downloadTemplate(){
+  const ws = XLSX.utils.json_to_sheet([
+    {codigo:'SH-001', nombre:'Shampoo reparador 250ml', precio:35000, iva:19},
+    {codigo:'AC-014', nombre:'Aceite de argán 60ml', precio:52000, iva:19},
+  ]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Productos');
+  XLSX.writeFile(wb, 'plantilla-imagen-cosmetics.xlsx');
+}
+function exportCatalog(){
+  if(catalog.length === 0){ toast('El catálogo está vacío'); return; }
+  const ws = XLSX.utils.json_to_sheet(catalog.map(p=>({codigo:p.code, nombre:p.name, precio:p.price, iva:p.iva})));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Catálogo');
+  XLSX.writeFile(wb, 'catalogo-imagen-cosmetics.xlsx');
+}
+
+/* ---------- Lector de código ---------- */
+const scanInput = document.getElementById('scanInput');
+scanInput.focus();
+scanInput.addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter'){
+    const code = scanInput.value.trim();
+    if(code) addToCartByCode(code);
+    scanInput.value = '';
+  }
+});
+function addToCartByCode(code){
+  const product = findProduct(code);
+  const status = document.getElementById('scanStatus');
+  if(!product){
+    status.textContent = 'No encontrado';
+    status.style.color = 'var(--danger)';
+    toast(`Código "${code}" no está en el catálogo`);
+    setTimeout(()=>{status.textContent='';}, 1800);
+    scanInput.focus();
+    return;
+  }
+  const existing = cart.find(i => i.code === product.code);
+  if(existing){ existing.qty += 1; }
+  else{ cart.push({...product, qty:1}); }
+  status.textContent = '✓ ' + product.name;
+  status.style.color = 'var(--sage)';
+  setTimeout(()=>{status.textContent='';}, 1500);
+  renderCart();
+  scanInput.focus();
+}
+
+/* ---------- Carrito ---------- */
+function renderCart(){
+  const body = document.getElementById('cartBody');
+  const emptyMsg = document.getElementById('cartEmptyMsg');
+  if(cart.length === 0){
+    body.innerHTML = '';
+    emptyMsg.style.display = 'block';
+  } else {
+    emptyMsg.style.display = 'none';
+    body.innerHTML = cart.map((item, idx) => {
+      const lineTotal = item.price * item.qty * (1 + item.iva/100);
+      return `
+      <tr>
+        <td>${escapeHtml(item.code)}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td class="num"><input type="number" class="qty-input" min="1" value="${item.qty}" onchange="updateQty(${idx}, this.value)"></td>
+        <td class="num">${fmt(item.price)}</td>
+        <td class="num">${item.iva}%</td>
+        <td class="num">${fmt(lineTotal)}</td>
+        <td><button class="icon-btn danger" onclick="removeFromCart(${idx})">✕</button></td>
+      </tr>`;
+    }).join('');
+  }
+  computeTotals();
+}
+function updateQty(idx, val){
+  const q = parseInt(val);
+  cart[idx].qty = (isNaN(q) || q < 1) ? 1 : q;
+  renderCart();
+}
+function removeFromCart(idx){
+  cart.splice(idx,1);
+  renderCart();
+}
+async function clearCart(){
+  if(cart.length===0) return;
+  cart = [];
+  renderCart();
+  toast('Documento vaciado');
+}
+function computeTotals(){
+  let subtotal = 0, ivaTotal = 0;
+  cart.forEach(i => {
+    const base = i.price * i.qty;
+    subtotal += base;
+    ivaTotal += base * (i.iva/100);
+  });
+  document.getElementById('totalSubtotal').textContent = fmt(subtotal);
+  document.getElementById('totalIva').textContent = fmt(ivaTotal);
+  document.getElementById('totalGrand').textContent = fmt(subtotal + ivaTotal);
+  return {subtotal, ivaTotal, total: subtotal+ivaTotal};
+}
+
+/* ---------- Preparar documento imprimible ---------- */
+function buildPrintable(){
+  const {subtotal, ivaTotal, total} = computeTotals();
+  document.getElementById('pBizName').textContent = bizInfo.name || 'Imagen Cosmetics';
+  const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
+  document.getElementById('pBizMeta').textContent = metaParts.join(' · ');
+  document.getElementById('pDocType').textContent = mode==='factura' ? 'Factura de venta' : 'Cotización';
+  document.getElementById('pDocNum').textContent = document.getElementById('docNumber').value;
+  document.getElementById('pDocDate').textContent = new Date().toLocaleDateString('es-CO', {year:'numeric', month:'long', day:'numeric'});
+
+  const cName = document.getElementById('clientName').value.trim();
+  const cCedula = document.getElementById('clientCedula').value.trim();
+  const cPhone = document.getElementById('clientPhone').value.trim();
+  const clientBits = [cCedula ? 'CC '+cCedula : '', cPhone].filter(Boolean).join(' · ');
+  document.getElementById('pClient').innerHTML = `<b>Cliente:</b> ${escapeHtml(cName || 'Consumidor final')}${clientBits ? ' · '+escapeHtml(clientBits) : ''}`;
+
+  document.getElementById('pTableBody').innerHTML = cart.map(item => {
+    const lineTotal = item.price * item.qty * (1 + item.iva/100);
+    return `<tr><td>${escapeHtml(item.code)}</td><td>${escapeHtml(item.name)}</td><td class="num">${item.qty}</td><td class="num">${fmt(item.price)}</td><td class="num">${item.iva}%</td><td class="num">${fmt(lineTotal)}</td></tr>`;
+  }).join('');
+  document.getElementById('pSubtotal').textContent = fmt(subtotal);
+  document.getElementById('pIva').textContent = fmt(ivaTotal);
+  document.getElementById('pGrand').textContent = fmt(total);
+  return {subtotal, ivaTotal, total};
+}
+
+/* ---------- Imprimir ---------- */
+function printDoc(){
+  if(cart.length===0){ toast('Agrega productos antes de imprimir'); return; }
+  buildPrintable();
+  window.print();
+  saveDocumentToHistory();
+  advanceDocNumber();
+}
+async function advanceDocNumber(){
+  docCounter += 1;
+  updateDocNumber();
+  await saveCounter();
+}
+
+/* ---------- Historial de clientes ---------- */
+async function saveDocumentToHistory(){
+  const {subtotal, ivaTotal, total} = computeTotals();
+  const record = {
+    docNumber: document.getElementById('docNumber').value,
+    mode: mode,
+    clientName: document.getElementById('clientName').value.trim() || 'Consumidor final',
+    clientCedula: document.getElementById('clientCedula').value.trim(),
+    clientPhone: document.getElementById('clientPhone').value.trim(),
+    items: cart.map(i => ({code:i.code, name:i.name, qty:i.qty, price:i.price, iva:i.iva})),
+    subtotal, ivaTotal, total
+  };
+  try{
+    await apiSend('/api/documents', 'POST', record);
+    renderHistory(document.getElementById('historySearch') ? document.getElementById('historySearch').value : '');
+  }catch(e){ console.error(e); toast('No se pudo guardar el documento en el historial'); }
+}
+let historyDebounce;
+function renderHistory(filter=''){
+  clearTimeout(historyDebounce);
+  historyDebounce = setTimeout(async ()=>{
+    const list = document.getElementById('historyList');
+    if(!list) return;
+    let items;
+    try{
+      items = await apiGet('/api/documents' + (filter.trim() ? '?q='+encodeURIComponent(filter.trim()) : ''));
+    }catch(e){ console.error(e); list.innerHTML = '<div class="empty-catalog">No se pudo cargar el historial.</div>'; return; }
+    if(items.length === 0){
+      list.innerHTML = '<div class="empty-catalog">' + (filter.trim() ? 'Sin resultados.' : 'Aún no hay documentos guardados.') + '</div>';
+      return;
+    }
+    list.innerHTML = items.map(r => `
+      <div class="catalog-item">
+        <div class="info">
+          <div class="code">${escapeHtml(r.doc_number)} · ${r.mode==='factura'?'Factura':'Cotización'} · ${new Date(r.created_at).toLocaleDateString('es-CO')}</div>
+          <div class="name">${escapeHtml(r.client_name||'')}${r.client_cedula ? ' · CC '+escapeHtml(r.client_cedula) : ''}</div>
+        </div>
+        <div class="price">${fmt(r.total)}</div>
+      </div>
+    `).join('');
+  }, 250);
+}
+
+/* ---------- Descargar PDF ---------- */
+async function downloadPdf(){
+  if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
+  const {subtotal, ivaTotal, total} = buildPrintable();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(18);
+  doc.setTextColor(110,42,56);
+  doc.text(bizInfo.name || 'Imagen Cosmetics', 14, 20);
+  doc.setFontSize(9);
+  doc.setTextColor(140,115,120);
+  doc.setFont('helvetica','normal');
+  const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
+  doc.text(metaParts.join(' · '), 14, 26);
+
+  doc.setFontSize(13);
+  doc.setTextColor(110,42,56);
+  doc.setFont('helvetica','bold');
+  doc.text((mode==='factura' ? 'FACTURA DE VENTA' : 'COTIZACIÓN'), 196, 18, {align:'right'});
+  doc.setFontSize(10);
+  doc.setTextColor(40,30,32);
+  doc.text(document.getElementById('docNumber').value, 196, 24, {align:'right'});
+  doc.setTextColor(140,115,120);
+  doc.text(new Date().toLocaleDateString('es-CO'), 196, 29, {align:'right'});
+
+  doc.setDrawColor(110,42,56);
+  doc.setLineWidth(0.6);
+  doc.line(14, 33, 196, 33);
+
+  const cName = document.getElementById('clientName').value.trim() || 'Consumidor final';
+  const cCedula = document.getElementById('clientCedula').value.trim();
+  const cPhone = document.getElementById('clientPhone').value.trim();
+  const clientBits = [cCedula ? 'CC '+cCedula : '', cPhone].filter(Boolean).join('  ·  ');
+  doc.setFontSize(10);
+  doc.setTextColor(40,30,32);
+  doc.text('Cliente: ' + cName + (clientBits ? '  ·  ' + clientBits : ''), 14, 41);
+
+  doc.autoTable({
+    startY: 47,
+    head: [['Código','Producto','Cant.','Precio','IVA','Total']],
+    body: cart.map(item => [
+      item.code, item.name, String(item.qty), fmt(item.price), item.iva+'%',
+      fmt(item.price * item.qty * (1+item.iva/100))
+    ]),
+    headStyles: { fillColor:[241,228,204], textColor:[110,42,56], fontStyle:'bold' },
+    styles: { fontSize:9, cellPadding:4 },
+    columnStyles: { 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'} },
+  });
+
+  const finalY = doc.lastAutoTable.finalY + 8;
+  doc.setFontSize(10);
+  doc.text('Subtotal', 150, finalY);
+  doc.text(fmt(subtotal), 196, finalY, {align:'right'});
+  doc.text('IVA', 150, finalY+6);
+  doc.text(fmt(ivaTotal), 196, finalY+6, {align:'right'});
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(13);
+  doc.setTextColor(110,42,56);
+  doc.text('Total', 150, finalY+15);
+  doc.text(fmt(total), 196, finalY+15, {align:'right'});
+
+  doc.setFontSize(9);
+  doc.setTextColor(140,115,120);
+  doc.setFont('helvetica','normal');
+  doc.text('Gracias por su compra · ' + (bizInfo.name || 'Imagen Cosmetics'), 105, 285, {align:'center'});
+
+  const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '.pdf';
+  doc.save(fname);
+  toast('PDF descargado');
+  saveDocumentToHistory();
+  advanceDocNumber();
+}
+
+/* ---------- Compartir por WhatsApp ---------- */
+function shareWhatsapp(){
+  if(cart.length===0){ toast('Agrega productos antes de compartir'); return; }
+  const {subtotal, ivaTotal, total} = computeTotals();
+  const cName = document.getElementById('clientName').value.trim();
+  const cCedula = document.getElementById('clientCedula').value.trim();
+  let lines = [];
+  lines.push(`*${bizInfo.name || 'Imagen Cosmetics'}*`);
+  lines.push(`${mode==='factura' ? 'Factura' : 'Cotización'} ${document.getElementById('docNumber').value}`);
+  if(cName) lines.push(`Cliente: ${cName}${cCedula ? ' (CC '+cCedula+')' : ''}`);
+  lines.push('');
+  cart.forEach(i => {
+    const lt = i.price * i.qty * (1+i.iva/100);
+    lines.push(`${i.qty} x ${i.name} - ${fmt(lt)}`);
+  });
+  lines.push('');
+  lines.push(`Subtotal: ${fmt(subtotal)}`);
+  lines.push(`IVA: ${fmt(ivaTotal)}`);
+  lines.push(`*Total: ${fmt(total)}*`);
+  lines.push('');
+  lines.push('(Descarga el PDF y adjúntalo en el chat si deseas enviar el documento completo).');
+  const text = encodeURIComponent(lines.join('\n'));
+  const phone = document.getElementById('clientPhone').value.trim().replace(/[^0-9]/g,'');
+  const url = phone ? `https://wa.me/${phone}?text=${text}` : `https://wa.me/?text=${text}`;
+  window.open(url, '_blank');
+}
+
+/* ---------- Utilidades ---------- */
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(str){ return escapeHtml(str).replace(/'/g,"\\'"); }
+
+/* ---------- Init ---------- */
+setMode('cotizacion');
+loadAll();
+</script>
+</body>
+</html>

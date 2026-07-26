@@ -1,0 +1,30 @@
+CÓMO USAR EL PROGRAMA
+
+Para abrir:
+- Windows: haz doble clic en "Abrir-Imagen-Cosmetics.bat"
+- Mac: haz doble clic en "Abrir-Imagen-Cosmetics.command"
+
+Se va a abrir solo en el navegador (Chrome/Edge) después de unos segundos.
+No necesitas internet para nada de esto.
+
+Mientras trabajas:
+- Puede que se abra también una ventanita negra pequeña de fondo — no la
+  cierres, solo déjala minimizada. Esa ventanita es la que hace que el
+  programa funcione. Si la cierras, el programa deja de funcionar (pero
+  no se pierde nada, solo tienes que volver a hacer doble clic en el
+  ícono para abrirlo de nuevo).
+
+Para cerrar al final del día:
+- Simplemente cierra la pestaña del navegador y la ventanita negra
+  (o apaga el computador). Todo lo que guardaste queda guardado.
+
+Respaldo (recomendado cada tanto):
+- Dentro de la app hay una sección "Respaldo" con un botón que dice
+  "Descargar respaldo". Haz clic ahí cada tanto y guarda el archivo
+  que se descarga en una memoria USB, por si acaso.
+- También queda un archivo llamado "imagen.db" en esta misma carpeta,
+  que es una copia de lo mismo.
+
+Si algo no abre o da error:
+- Avísale a la persona que instaló el programa, mostrándole una foto
+  de la pantalla con el error.

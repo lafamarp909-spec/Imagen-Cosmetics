@@ -1,0 +1,28 @@
+Esta carpeta debe tener estos 3 archivos para que "Importar Excel" y
+"Descargar PDF" funcionen SIN internet. Antes venían de internet (CDN),
+por eso fallaban en la tienda.
+
+Necesitas descargarlos UNA SOLA VEZ (en un lugar con internet: celular con
+datos, café internet, etc.) y ponerlos en esta misma carpeta "vendor",
+con estos nombres exactos:
+
+1. xlsx.full.min.js
+   Descárgalo de:
+   https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
+
+2. jspdf.umd.min.js
+   Descárgalo de:
+   https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js
+
+3. jspdf.plugin.autotable.min.js
+   Descárgalo de:
+   https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js
+
+Cómo descargarlos: abre cada enlace en el navegador, y guarda la página
+(Ctrl+S o clic derecho → "Guardar como") con el nombre indicado arriba,
+dentro de la carpeta "public/vendor" de este proyecto.
+
+Una vez estén los 3 archivos aquí, no se vuelven a necesitar internet:
+quedan guardados para siempre en el computador de la tienda.
+
+Puedes borrar este archivo LEEME.txt cuando ya no lo necesites.
