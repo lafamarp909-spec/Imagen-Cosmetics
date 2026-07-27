@@ -136,6 +136,10 @@ async function deleteDocument(id) {
   await pool.query('DELETE FROM documents WHERE id = $1', [id]);
 }
 
+async function deleteAllDocuments() {
+  await pool.query('DELETE FROM documents');
+}
+
 /* ---------------- Respaldo ---------------- */
 
 function getBackupFilePath() {
@@ -147,6 +151,6 @@ function getBackupFilePath() {
 module.exports = {
   initDb, getProducts, bulkSetProducts, deleteProduct,
   getSettings, updateSettings, getDocuments, insertDocument,
-  updateDocument, deleteDocument,
+  updateDocument, deleteDocument, deleteAllDocuments,
   getBackupFilePath,
 };

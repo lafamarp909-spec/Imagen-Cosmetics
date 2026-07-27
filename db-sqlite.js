@@ -151,6 +151,11 @@ function deleteDocument(id) {
   return Promise.resolve();
 }
 
+function deleteAllDocuments() {
+  db.prepare('DELETE FROM documents').run();
+  return Promise.resolve();
+}
+
 /* ---------------- Respaldo ---------------- */
 
 function getBackupFilePath() {
@@ -163,6 +168,6 @@ function getBackupFilePath() {
 module.exports = {
   initDb, getProducts, bulkSetProducts, deleteProduct,
   getSettings, updateSettings, getDocuments, insertDocument,
-  updateDocument, deleteDocument,
+  updateDocument, deleteDocument, deleteAllDocuments,
   getBackupFilePath,
 };

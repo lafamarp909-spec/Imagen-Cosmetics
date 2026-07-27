@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
   :root{
     --bg: #FBF6F2;
@@ -88,6 +89,14 @@
     cursor:pointer; font-family:inherit; transition:.15s;
   }
   .mode-toggle button.active{ background:var(--gold); color:var(--wine-dark); opacity:1; }
+
+  .seg-toggle{ display:flex; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:4px; gap:2px; }
+  .seg-toggle button{
+    flex:1; border:none; background:transparent; color:var(--muted); opacity:.85;
+    padding:8px 14px; border-radius:999px; font-size:13px; font-weight:600;
+    cursor:pointer; font-family:inherit; transition:.15s;
+  }
+  .seg-toggle button.active{ background:var(--wine); color:#fff; opacity:1; }
 
   main{ max-width:1280px; margin:26px auto 60px; padding:0 28px; display:grid; grid-template-columns: 380px 1fr; gap:22px; }
   @media (max-width:960px){ main{ grid-template-columns:1fr; } }
@@ -502,8 +511,13 @@
     <div class="panel">
       <h2>Historial de clientes</h2>
       <p class="sub">Busca por cédula o nombre para ver las facturas y cotizaciones anteriores de un cliente. Deja el buscador vacío para ver todo el historial.</p>
+      <div class="seg-toggle" style="margin-bottom:10px;">
+        <button id="btnHistCotizacion" onclick="setHistoryTab('cotizacion')">Cotizaciones</button>
+        <button id="btnHistFactura" onclick="setHistoryTab('factura')">Facturas</button>
+      </div>
       <input type="text" id="historySearch" placeholder="Buscar por cédula o nombre..." oninput="renderHistory(this.value)">
       <div class="catalog-list" id="historyList" style="margin-top:10px; max-height:260px;"></div>
+      <button class="btn btn-block" style="background:var(--danger); color:#fff; margin-top:12px;" onclick="clearAllHistory()">🗑 Eliminar todo el historial</button>
     </div>
   </div>
 </main>
@@ -570,6 +584,7 @@ let adminPin = '1379';
 let pinVerifiedSession = false;
 
 /* ---------- Historial (modal ver/editar) ---------- */
+let historyTab = 'cotizacion'; // 'cotizacion' | 'factura' — cotizaciones y facturas se muestran en apartados separados
 let historyItems = [];
 let historyEditingId = null;
 let historyEditWorking = null;
@@ -1238,6 +1253,12 @@ async function saveDocumentToHistory(){
     renderHistory(document.getElementById('historySearch') ? document.getElementById('historySearch').value : '');
   }catch(e){ console.error(e); toast('No se pudo guardar el documento en el historial'); }
 }
+function setHistoryTab(t){
+  historyTab = t;
+  document.getElementById('btnHistCotizacion').classList.toggle('active', t==='cotizacion');
+  document.getElementById('btnHistFactura').classList.toggle('active', t==='factura');
+  renderHistory(document.getElementById('historySearch') ? document.getElementById('historySearch').value : '');
+}
 let historyDebounce;
 function renderHistory(filter=''){
   clearTimeout(historyDebounce);
@@ -1248,9 +1269,12 @@ function renderHistory(filter=''){
     try{
       items = await apiGet('/api/documents' + (filter.trim() ? '?q='+encodeURIComponent(filter.trim()) : ''));
     }catch(e){ console.error(e); list.innerHTML = '<div class="empty-catalog">No se pudo cargar el historial.</div>'; return; }
+    // Cotizaciones y facturas se muestran en apartados separados (pestañas), nunca mezcladas.
+    items = items.filter(r => (r.mode || 'cotizacion') === historyTab);
     historyItems = items;
     if(items.length === 0){
-      list.innerHTML = '<div class="empty-catalog">' + (filter.trim() ? 'Sin resultados.' : 'Aún no hay documentos guardados.') + '</div>';
+      const label = historyTab === 'factura' ? 'facturas' : 'cotizaciones';
+      list.innerHTML = '<div class="empty-catalog">' + (filter.trim() ? 'Sin resultados.' : 'Aún no hay ' + label + ' guardadas.') + '</div>';
       return;
     }
     list.innerHTML = items.map(r => `
@@ -1315,7 +1339,7 @@ function closeHistoryModal(){
 
 /* ---------- Descargar PDF / WhatsApp de un documento del historial ---------- */
 /* Carga temporalmente los datos del documento guardado en las variables/campos
-   que usan downloadPdf()/downloadPdfRecibo()/shareWhatsapp(), genera el archivo
+   que usan downloadPdf()/shareWhatsapp(), genera el archivo
    o el mensaje, y luego restaura todo tal como estaba (sin duplicar el
    documento en el historial ni avanzar el consecutivo). */
 function withHistoryDocLoaded(doc, action){
@@ -1437,6 +1461,22 @@ function confirmDeleteHistoryDoc(id){
     deleteHistoryDoc(id);
   });
 }
+function clearAllHistory(){
+  requirePin(async () => {
+    let all;
+    try{ all = await apiGet('/api/documents'); }catch(e){ console.error(e); toast('No se pudo leer el historial'); return; }
+    if(all.length === 0){ toast('El historial ya está vacío'); return; }
+    const ok = confirm('¿Seguro que quieres borrar TODO el historial (cotizaciones y facturas)? Esta acción no se puede deshacer.');
+    if(!ok) return;
+    const ok2 = confirm('Confirma una vez más: se eliminarán los ' + all.length + ' documentos guardados.');
+    if(!ok2) return;
+    try{
+      await apiDelete('/api/documents');
+      toast('Historial vaciado por completo');
+      renderHistory(document.getElementById('historySearch').value);
+    }catch(e){ console.error(e); toast('No se pudo vaciar el historial'); }
+  });
+}
 async function deleteHistoryDoc(id){
   try{
     await apiDelete('/api/documents/' + id);
@@ -1446,189 +1486,67 @@ async function deleteHistoryDoc(id){
   }catch(e){ console.error(e); toast('No se pudo eliminar el documento'); }
 }
 
-/* ---------- Descargar PDF ---------- */
+/* ---------- Descargar PDF ----------
+   Genera el PDF a partir del MISMO HTML que se usa para "Imprimir"
+   (#printable), así el PDF descargado se ve exactamente igual al
+   documento impreso, sin necesidad de mantener dos diseños distintos. */
 async function downloadPdf(opts = {}){
   const persist = opts.persist !== false;
   if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
-  if(printFormat === 'recibo'){ downloadPdfRecibo(opts); return; }
-  const {subtotal, total, discountAmount} = buildPrintable();
-  const showDiscount = discountPercent > 0 && discountAmount > 0;
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  buildPrintable();
+  const printable = document.getElementById('printable');
+  const isRecibo = printFormat === 'recibo';
+  const prevStyle = printable.getAttribute('style') || '';
 
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(18);
-  doc.setTextColor(110,42,56);
-  doc.text(bizInfo.name || 'Imagen Cosmetics', 14, 20);
-  doc.setFontSize(9);
-  doc.setTextColor(140,115,120);
-  doc.setFont('helvetica','normal');
-  const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
-  doc.text(metaParts.join(' · '), 14, 26);
+  // Se muestra fuera de la pantalla (no display:none) para poder capturarlo con html2canvas.
+  printable.style.display = 'block';
+  printable.style.position = 'fixed';
+  printable.style.top = '0';
+  printable.style.left = '-99999px';
+  printable.style.zIndex = '-1';
+  printable.style.width = isRecibo ? '80mm' : '210mm';
+  printable.style.background = '#fff';
 
-  doc.setFontSize(13);
-  doc.setTextColor(110,42,56);
-  doc.setFont('helvetica','bold');
-  doc.text((mode==='factura' ? 'FACTURA DE VENTA' : 'COTIZACIÓN'), 196, 18, {align:'right'});
-  doc.setFontSize(10);
-  doc.setTextColor(40,30,32);
-  doc.text(document.getElementById('docNumber').value, 196, 24, {align:'right'});
-  doc.setTextColor(140,115,120);
-  doc.text(new Date().toLocaleDateString('es-CO'), 196, 29, {align:'right'});
+  try{
+    const canvas = await html2canvas(printable, { scale: 2, backgroundColor:'#ffffff', useCORS:true });
+    const imgData = canvas.toDataURL('image/png');
+    const { jsPDF } = window.jspdf;
+    const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + (isRecibo ? '-recibo.pdf' : '.pdf');
 
-  doc.setDrawColor(110,42,56);
-  doc.setLineWidth(0.6);
-  doc.line(14, 33, 196, 33);
-
-  const cName = document.getElementById('clientName').value.trim() || 'Consumidor final';
-  const cCedula = document.getElementById('clientCedula').value.trim();
-  const cPhone = document.getElementById('clientPhone').value.trim();
-  const clientBits = [cCedula ? 'CC '+cCedula : '', cPhone].filter(Boolean).join('  ·  ');
-  doc.setFontSize(10);
-  doc.setTextColor(40,30,32);
-  doc.text('Cliente: ' + cName + (clientBits ? '  ·  ' + clientBits : ''), 14, 41);
-
-  doc.autoTable({
-    startY: 47,
-    head: [['Código','Producto','Cant.','Precio','Total']],
-    body: cart.map(item => [
-      item.code, item.name, String(item.qty), fmt(item.price),
-      fmt(item.price * item.qty)
-    ]),
-    headStyles: { fillColor:[241,228,204], textColor:[110,42,56], fontStyle:'bold' },
-    styles: { fontSize:9, cellPadding:4 },
-    columnStyles: { 2:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
-  });
-
-  const finalY = doc.lastAutoTable.finalY + 8;
-  doc.setFontSize(10);
-  doc.text('Subtotal', 150, finalY);
-  doc.text(fmt(subtotal), 196, finalY, {align:'right'});
-  let offsetY = 0;
-  if(showDiscount){
-    doc.text('Descuento (' + discountPercent + '%)', 150, finalY+6);
-    doc.text('-' + fmt(discountAmount), 196, finalY+6, {align:'right'});
-    offsetY = 6;
-  }
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(13);
-  doc.setTextColor(110,42,56);
-  doc.text('Total', 150, finalY+15+offsetY);
-  doc.text(fmt(total), 196, finalY+15+offsetY, {align:'right'});
-
-  doc.setFontSize(9);
-  doc.setTextColor(140,115,120);
-  doc.setFont('helvetica','normal');
-  doc.text('Gracias por su compra · ' + (bizInfo.name || 'Imagen Cosmetics'), 105, 285, {align:'center'});
-
-  const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '.pdf';
-  doc.save(fname);
-  toast('PDF descargado');
-  if(persist){
-    saveDocumentToHistory();
-    advanceDocNumber();
-  }
-}
-
-/* ---------- Descargar PDF formato recibo (80mm, alargado hacia abajo) ---------- */
-function downloadPdfRecibo(opts = {}){
-  const persist = opts.persist !== false;
-  const {subtotal, total, discountAmount} = computeTotals();
-  const showDiscount = discountPercent > 0 && discountAmount > 0;
-  const { jsPDF } = window.jspdf;
-  const W = 80; // ancho fijo en mm (tipo ticket)
-  // Alto dinámico: crece hacia abajo según la cantidad de productos
-  const rowsHeight = cart.reduce((acc, item) => acc + (item.name.length > 22 ? 12 : 8), 0);
-  const H = 55 + rowsHeight + 30 + (showDiscount ? 5 : 0); // encabezado + filas + totales/footer
-  const doc = new jsPDF({ unit:'mm', format:[W, H] });
-  const cx = W/2;
-
-  let y = 8;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(12);
-  doc.setTextColor(110,42,56);
-  doc.text(bizInfo.name || 'Imagen Cosmetics', cx, y, {align:'center'});
-  y += 5;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(7);
-  doc.setTextColor(140,115,120);
-  const metaParts = [bizInfo.nit ? 'NIT '+bizInfo.nit : '', bizInfo.address || '', bizInfo.phone || ''].filter(Boolean);
-  if(metaParts.length){ doc.text(metaParts.join(' · '), cx, y, {align:'center'}); y += 4; }
-
-  y += 2;
-  doc.setDrawColor(110,42,56);
-  doc.setLineDash([1,1], 0);
-  doc.line(4, y, W-4, y);
-  doc.setLineDash([], 0);
-  y += 5;
-
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(9);
-  doc.setTextColor(110,42,56);
-  doc.text((mode==='factura' ? 'FACTURA DE VENTA' : 'COTIZACIÓN'), 4, y);
-  y += 4;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(40,30,32);
-  doc.text(document.getElementById('docNumber').value + ' · ' + new Date().toLocaleDateString('es-CO'), 4, y);
-  y += 5;
-
-  const cName = document.getElementById('clientName').value.trim() || 'Consumidor final';
-  const cCedula = document.getElementById('clientCedula').value.trim();
-  doc.text('Cliente: ' + cName + (cCedula ? ' · CC '+cCedula : ''), 4, y);
-  y += 5;
-
-  doc.setDrawColor(110,42,56);
-  doc.setLineDash([1,1], 0);
-  doc.line(4, y, W-4, y);
-  doc.setLineDash([], 0);
-  y += 5;
-
-  doc.setFontSize(7.5);
-  cart.forEach(item => {
-    const lineTotal = item.price * item.qty;
-    doc.setFont('helvetica','bold');
-    doc.setTextColor(40,30,32);
-    const nameLines = doc.splitTextToSize(item.name, W-8);
-    doc.text(nameLines, 4, y);
-    y += nameLines.length * 3.4 + 1;
-    doc.setFont('helvetica','normal');
-    doc.setTextColor(140,115,120);
-    doc.text(`${item.qty} x ${fmt(item.price)}`, 4, y);
-    doc.setTextColor(110,42,56);
-    doc.text(fmt(lineTotal), W-4, y, {align:'right'});
-    y += 5;
-  });
-
-  doc.setDrawColor(110,42,56);
-  doc.setLineDash([1,1], 0);
-  doc.line(4, y, W-4, y);
-  doc.setLineDash([], 0);
-  y += 5;
-
-  doc.setFontSize(8);
-  doc.setTextColor(40,30,32);
-  doc.text('Subtotal', 4, y); doc.text(fmt(subtotal), W-4, y, {align:'right'}); y += 4.5;
-  if(showDiscount){
-    doc.text('Descuento (' + discountPercent + '%)', 4, y); doc.text('-' + fmt(discountAmount), W-4, y, {align:'right'}); y += 4.5;
-  }
-  y += 1;
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(11);
-  doc.setTextColor(110,42,56);
-  doc.text('Total', 4, y); doc.text(fmt(total), W-4, y, {align:'right'}); y += 8;
-
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(6.5);
-  doc.setTextColor(140,115,120);
-  doc.text('Gracias por su compra · ' + (bizInfo.name || 'Imagen Cosmetics'), cx, y, {align:'center'});
-
-  const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '-recibo.pdf';
-  doc.save(fname);
-  toast('PDF (formato recibo) descargado');
-  if(persist){
-    saveDocumentToHistory();
-    advanceDocNumber();
+    if(isRecibo){
+      const pageW = 80;
+      const pageH = canvas.height * pageW / canvas.width;
+      const doc = new jsPDF({ unit:'mm', format:[pageW, pageH] });
+      doc.addImage(imgData, 'PNG', 0, 0, pageW, pageH);
+      doc.save(fname);
+    } else {
+      const doc = new jsPDF({ unit:'mm', format:'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const imgW = pageW;
+      const imgH = canvas.height * imgW / canvas.width;
+      let position = 0;
+      let heightLeft = imgH;
+      doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+      heightLeft -= pageH;
+      while(heightLeft > 0){
+        position -= pageH;
+        doc.addPage();
+        doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+        heightLeft -= pageH;
+      }
+      doc.save(fname);
+    }
+    toast('PDF descargado');
+    if(persist){
+      saveDocumentToHistory();
+      advanceDocNumber();
+    }
+  }catch(e){
+    console.error(e);
+    toast('No se pudo generar el PDF');
+  }finally{
+    printable.setAttribute('style', prevStyle);
   }
 }
 
@@ -1668,6 +1586,7 @@ function escapeAttr(str){ return escapeHtml(str).replace(/'/g,"\\'"); }
 
 /* ---------- Init ---------- */
 setMode('cotizacion');
+document.getElementById('btnHistCotizacion').classList.add('active');
 loadAll();
 </script>
 </body>

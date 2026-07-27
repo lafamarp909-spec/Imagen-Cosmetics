@@ -89,6 +89,16 @@ app.post('/api/documents', async (req, res) => {
   }
 });
 
+app.delete('/api/documents', async (req, res) => {
+  try {
+    await db.deleteAllDocuments();
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'No se pudo vaciar el historial' });
+  }
+});
+
 app.put('/api/documents/:id', async (req, res) => {
   try {
     await db.updateDocument(req.params.id, req.body);
