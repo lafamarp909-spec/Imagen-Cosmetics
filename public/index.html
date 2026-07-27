@@ -1299,6 +1299,8 @@ function openHistoryModal(id){
   `;
   document.getElementById('historyModalFooter').innerHTML = `
     <button class="btn btn-ghost" onclick="closeHistoryModal()">Cerrar</button>
+    <button class="btn btn-gold" onclick="downloadPdfFromHistory(${id})">⬇ Descargar PDF</button>
+    <button class="btn btn-sage" onclick="shareWhatsappFromHistory(${id})">📤 WhatsApp</button>
     <button class="btn btn-gold" onclick="startEditHistoryDoc()">✎ Editar</button>
     <button class="btn" style="background:var(--danger); color:#fff;" onclick="confirmDeleteHistoryDoc(${id})">🗑 Eliminar</button>
   `;
@@ -1309,6 +1311,54 @@ function closeHistoryModal(){
   historyEditingId = null;
   historyEditWorking = null;
   historyEditClient = null;
+}
+
+/* ---------- Descargar PDF / WhatsApp de un documento del historial ---------- */
+/* Carga temporalmente los datos del documento guardado en las variables/campos
+   que usan downloadPdf()/downloadPdfRecibo()/shareWhatsapp(), genera el archivo
+   o el mensaje, y luego restaura todo tal como estaba (sin duplicar el
+   documento en el historial ni avanzar el consecutivo). */
+function withHistoryDocLoaded(doc, action){
+  const snapshot = {
+    cart, mode, discountPercent, manualTotal,
+    clientName: document.getElementById('clientName').value,
+    clientCedula: document.getElementById('clientCedula').value,
+    clientPhone: document.getElementById('clientPhone').value,
+    docNumber: document.getElementById('docNumber').value,
+  };
+
+  cart = JSON.parse(JSON.stringify(doc.items || []));
+  mode = doc.mode || 'cotizacion';
+  discountPercent = 0;
+  manualTotal = doc.total;
+  document.getElementById('clientName').value = doc.client_name || '';
+  document.getElementById('clientCedula').value = doc.client_cedula || '';
+  document.getElementById('clientPhone').value = doc.client_phone || '';
+  document.getElementById('docNumber').value = doc.doc_number || '';
+
+  try{
+    action();
+  } finally {
+    cart = snapshot.cart;
+    mode = snapshot.mode;
+    discountPercent = snapshot.discountPercent;
+    manualTotal = snapshot.manualTotal;
+    document.getElementById('clientName').value = snapshot.clientName;
+    document.getElementById('clientCedula').value = snapshot.clientCedula;
+    document.getElementById('clientPhone').value = snapshot.clientPhone;
+    document.getElementById('docNumber').value = snapshot.docNumber;
+    computeTotals();
+  }
+}
+function downloadPdfFromHistory(id){
+  const doc = findHistoryDoc(id);
+  if(!doc) return;
+  withHistoryDocLoaded(doc, () => downloadPdf({ persist:false }));
+}
+function shareWhatsappFromHistory(id){
+  const doc = findHistoryDoc(id);
+  if(!doc) return;
+  withHistoryDocLoaded(doc, () => shareWhatsapp());
 }
 function startEditHistoryDoc(){
   const doc = findHistoryDoc(historyEditingId);
@@ -1397,9 +1447,10 @@ async function deleteHistoryDoc(id){
 }
 
 /* ---------- Descargar PDF ---------- */
-async function downloadPdf(){
+async function downloadPdf(opts = {}){
+  const persist = opts.persist !== false;
   if(cart.length===0){ toast('Agrega productos antes de generar el PDF'); return; }
-  if(printFormat === 'recibo'){ downloadPdfRecibo(); return; }
+  if(printFormat === 'recibo'){ downloadPdfRecibo(opts); return; }
   const {subtotal, total, discountAmount} = buildPrintable();
   const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
@@ -1473,12 +1524,15 @@ async function downloadPdf(){
   const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '.pdf';
   doc.save(fname);
   toast('PDF descargado');
-  saveDocumentToHistory();
-  advanceDocNumber();
+  if(persist){
+    saveDocumentToHistory();
+    advanceDocNumber();
+  }
 }
 
 /* ---------- Descargar PDF formato recibo (80mm, alargado hacia abajo) ---------- */
-function downloadPdfRecibo(){
+function downloadPdfRecibo(opts = {}){
+  const persist = opts.persist !== false;
   const {subtotal, total, discountAmount} = computeTotals();
   const showDiscount = discountPercent > 0 && discountAmount > 0;
   const { jsPDF } = window.jspdf;
@@ -1572,8 +1626,10 @@ function downloadPdfRecibo(){
   const fname = (mode==='factura'?'factura-':'cotizacion-') + document.getElementById('docNumber').value.replace('#','') + '-recibo.pdf';
   doc.save(fname);
   toast('PDF (formato recibo) descargado');
-  saveDocumentToHistory();
-  advanceDocNumber();
+  if(persist){
+    saveDocumentToHistory();
+    advanceDocNumber();
+  }
 }
 
 /* ---------- Compartir por WhatsApp ---------- */
