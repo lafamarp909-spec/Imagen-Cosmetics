@@ -943,6 +943,7 @@ function parsePrice(val){
 function classifyHeader(norm){
   if(!norm) return null;
   if(norm.includes('codigo') || norm==='sku' || norm.includes('referencia')) return {type:'codigo', priority:1};
+  if(norm.includes('precioestandar') || norm.includes('preciostandard')) return {type:'precio', priority:4};
   if(norm.includes('preciodeventasugerido') || norm.includes('preciodeventa') || norm.includes('pvp') || norm.includes('preciosugerido') || norm.includes('preciopublico')) return {type:'precio', priority:3};
   if(norm.includes('valorventa')) return {type:'precio', priority:3};
   if(norm.includes('precio') && !norm.includes('costo')) return {type:'precio', priority:2};
@@ -963,6 +964,21 @@ function detectHeaderRow(rows){
     if(hasNombre && hasPrecio) return i;
   }
   return -1;
+}
+/* Si el título de alguna columna (ej. "Precio estándar") quedó suelto una fila
+   más arriba de los demás encabezados (columna vacía en la fila de "Producto"),
+   lo tomamos de esa fila anterior para esa columna. */
+function effectiveHeaderRow(rows, headerIdx){
+  const row = (rows[headerIdx] || []).slice();
+  const prevRow = rows[headerIdx - 1] || [];
+  for(let col = 0; col < Math.max(row.length, prevRow.length); col++){
+    const cur = row[col];
+    const isBlank = (cur === undefined || cur === null || String(cur).trim() === '');
+    if(isBlank && prevRow[col] !== undefined && String(prevRow[col]).trim() !== ''){
+      row[col] = prevRow[col];
+    }
+  }
+  return row;
 }
 function findProductByName(name){
   const n = name.trim().toLowerCase();
@@ -992,7 +1008,7 @@ document.getElementById('excelFile').addEventListener('change', (e)=>{
         toast('No encontré una fila de encabezados con nombre y precio. Revisa el archivo.');
         return;
       }
-      const headerRow = rows[headerIdx];
+      const headerRow = effectiveHeaderRow(rows, headerIdx);
       // Para cada tipo (codigo/nombre/precio/iva), elegir la columna de mayor prioridad
       const best = {}; // type -> {col, priority}
       headerRow.forEach((cell, col) => {
